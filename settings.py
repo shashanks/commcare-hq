@@ -238,7 +238,7 @@ HQ_APPS = (
     'a5288',
     'custom.bihar',
     'dca',
-    'gsid',
+    'custom.apps.gsid',
     'hsph',
     'mvp',
     'mvp_apps',
