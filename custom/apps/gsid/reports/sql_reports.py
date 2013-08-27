@@ -1,7 +1,10 @@
 from sqlagg.columns import *
 from sqlagg.base import AliasColumn
+from sqlalchemy import func
 from corehq.apps.fixtures.models import FixtureDataItem, FixtureDataType
-from corehq.apps.reports.sqlreport import SqlTabularReport, DatabaseColumn, SummingSqlTabularReport
+from corehq.apps.reports.basic import Column
+from corehq.apps.reports.datatables import DataTablesColumnGroup
+from corehq.apps.reports.sqlreport import SqlTabularReport, DatabaseColumn, SummingSqlTabularReport, AggregateColumn
 from corehq.apps.reports.standard import CustomProjectReport, DatespanMixin
 from util import get_unique_combinations
 from dimagi.utils.decorators.memoized import memoized
@@ -15,7 +18,6 @@ class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin)
     emailable = True
     slug = "my_basic_sql"
     section_name = "event demonstrations"
-    table_name = "gsid_patient_summary"
 
     @property
     def group_by(self):
@@ -25,15 +27,18 @@ class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin)
     def filter_values(self):
         return dict(domain=self.domain,
                     startdate=self.datespan.startdate_param_utc,
-                    enddate=self.datespan.enddate_param_utc)
+                    enddate=self.datespan.enddate_param_utc,
+                    male="male",
+                    female="female",
+                    positive="Positive")
 
     @property
     def filters(self):
-        return ["domain = :domain", "date between :startdate and :enddate"]
+        return ["date between :startdate and :enddate"]
 
     @property
     def keys(self):
-        return [[self.domain, 'female', "highpoint"], [self.domain, 'male', "highpoint"]]
+        return [['highpoint'], ['high_point']]
 
     def selected_fixture(self):
         fixture = self.request.GET.get('fixture_id', "")
@@ -44,58 +49,69 @@ class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin)
     def place_types(self):
         opts = ['state', 'district', 'block', 'village']
         agg_at = self.request.GET.get('aggregate_at', None)
-        agg_at = agg_at if agg_at and opts.index(agg_at) <= opts.index(self.default_aggregation) else self.default_aggregation
+        agg_at = agg_at if agg_at and opts.index(agg_at) <= opts.inAliasColumndex(self.default_aggregation) else self.default_aggregation
         return opts[:opts.index(agg_at) + 1]
 
-    @property
-    def initial_columns(self):
-        initial_cols = dict(state_name=DatabaseColumn("State", SimpleColumn('state')),
-                            district_name=DatabaseColumn("District", SimpleColumn('district')),
-                            block_name=DatabaseColumn("Block", SimpleColumn('block')),
-                            village_name=DatabaseColumn("Village", AliasColumn('village_code'),
-                                                        format_fn=self.get_village_name),
-                            village_code=DatabaseColumn("Village Code", SimpleColumn('village_code')),
-                            village_class=DatabaseColumn("Village Class", AliasColumn('village_code'),
-                                                         format_fn=self.get_village_class))
-        ret = tuple([col + '_name' for col in self.place_types[:3]])
-        if len(self.place_types) > 3:
-            ret += ('village_name', 'village_code', 'village_class')
-        return [initial_cols[col] for col in ret]
+class GSIDSQLPatientReport(GSIDSQLReport):
 
-    @memoized
-    def get_village(self, id):
-        village_fdt = self.get_village_fdt(self.domain)
-        return FixtureDataItem.by_field_value(self.domain, village_fdt, 'id', float(id)).one()
-
-    def get_village_name(self, village_id):
-        return self.get_village(village_id).fields.get("name", id)
-
-    def get_village_class(self, village_id):
-        return self.get_village(village_id).fields.get("village_class", "No data")
-    
-    def get_village_fdt(self, domain):
-        return FixtureDataType.by_domain_tag(domain, 'village').one()
-
-
-class PSISQLEventsReport(PSISQLReport):
-    fields = ['corehq.apps.reports.fields.DatespanField',
-              'psi.reports.StateDistrictField',
-              'psi.reports.AASD',]
-    name = "Event Demonstration Report"
-    exportable = True
-    emailable = True
-    slug = "event_demonstations_sql"
-    section_name = "event demonstrations"
-    default_aggregation = 'district'
-    table_name = 'psi-unicef_psi_events'
+    name = "Patient Summary Report"
+    slug = "patient_summary_sql"
+    section_name = "patient summary"
+    table_name = "gsid_patient_summary"
 
     @property
     def columns(self):
-        return self.initial_columns + [
-            DatabaseColumn("Number of events", SumColumn('events')),
-            DatabaseColumn("Number of male attendees", SumColumn('males')),
-            DatabaseColumn("Number of female attendees", SumColumn('females')),
-            DatabaseColumn("Total number of attendees", SumColumn('attendees')),
-            DatabaseColumn("Total number of leaflets distributed", SumColumn('leaflets')),
-            DatabaseColumn("Total number of gifts distributed", SumColumn('gifts'))
+        agg_fn = lambda x, y: str(x)+"-"+str(y)
+        sum_agg_fn = lambda x, y: x + y
+        patient_number_group = DataTablesColumnGroup("Tests")
+        positive_group = DataTablesColumnGroup("Positive Tests")
+        age_range_group = DataTablesColumnGroup("Age Range")
+        return [
+            DatabaseColumn("Clinic Name", SimpleColumn("clinic")),
+            DatabaseColumn("Number of Males ", CountColumn('gender', alias="male-total", filters=["gender = :male"]), header_group=patient_number_group),
+            DatabaseColumn("Number of Females ", CountColumn('gender', alias="female-total", filters=["gender = :female"]), header_group=patient_number_group),
+            DatabaseColumn("Number of Male Postives", CountColumn("diagnosis", alias="male-positive", filters=["gender = :male", "diagnosis = :positive"]), header_group=positive_group),
+            DatabaseColumn("Number of Female Postives", CountColumn("diagnosis", alias="female-positive", filters=["gender = :female", "diagnosis = :positive"]), header_group=positive_group),
+            #DatabaseColumn("Number of Male Postives", CountColumn("diagnosis", alias="male-positive", filters=["gender = :male", "diagnosis = :positive"])),
+            #DatabaseColumn("Number of Female Postives", CountColumn("diagnosis", alias="female-positive", filters=["gender = :female", "diagnosis = :positive"])),
+            #DatabaseColumn("num of", agg_fn, AliasColumn("male-positive"), AliasColumn("female-positive")),
+            DatabaseColumn("Total", AggregateColumn(sum_agg_fn, AliasColumn("male-total"), AliasColumn("female-total"))),
+            #CountColumn("gender", filters=['gender = :male']),
+            #DatabaseColumn("Total Male", CountColumn("gender", filters=['gender = :male'])),
+            #SumColumn("Total Female", filters=['sex = :female']),
+            #AggregateColumn("age", agg_fn, MaxColumn('age', filters=['gender = :male']), MinColumn('age', filters=['gender = :male'])),
+            #DatabaseColumn("Male range", AggregateColumn(agg_fn, MaxColumn('age', filters=['gender = :male']), MinColumn('age', filters=['gender = :male']))),            
+        ]
+
+class GSIDSQLByDayReport(GSIDSQLReport):
+    name = "Day Summary Report"
+    slug = "day_summary_sql"
+    section_name = "day summary"
+    table_name = "gsid_results_by_day"
+
+class GSIDSQLTestLotsReport(GSIDSQLReport):
+    name = "Test Lots Report"
+    slug = "test_lots_sql"
+    section_name = "test lots"
+    table_name = "gsid_test_lots"
+
+class GSIDSQLByAgeReport(GSIDSQLReport):
+    name = "Age Summary Report"
+    slug = "age_summary_sql"
+    section_name = "age summary"
+    table_name = "gsid_results_by_age"
+
+    @property
+    def filter_values(self):
+        default_filter_values = super(GSIDSQLByAgeReport, self).filter_values
+        age_filters = dict(zero=0,
+                    ten=10,
+                    twenty=20,
+                    fifty=50)
+        return default_filter_values.update(age_filters)
+
+    @property
+    def columns(self):
+        return [
+            DatabaseColumn("Clinic Name", SimpleColumn("clinic")),
         ]
