@@ -10,6 +10,7 @@ function (doc) {
             [doc.domain,
             form["@name"],
             form.test_version,
+            form.country,
             form.province,
             form.district,
             form.clinic,
