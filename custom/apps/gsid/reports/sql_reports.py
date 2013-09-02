@@ -143,12 +143,14 @@ class GSIDSQLByAgeReport(GSIDSQLReport):
     def columns(self):
         percent_fn = lambda x, y: "%(x)s (%(p)s%%)" % {"x": int(x or 0), "p": 100*(x or 0) / (y or 1)}
         
-        age_range_group = DataTablesColumnGroup("Positive Tests %positive")
+        female_range_group = DataTablesColumnGroup("Female Positive Tests (% positive)")
+        male_range_group = DataTablesColumnGroup("Male Positive Tests (% positive)")
 
         def age_range_filter(gender, age_from, age_to):
             return [AND([EQ("gender", gender), EQ("diagnosis", "positive"), BETWEEN("age", age_from, age_to)])]
 
         def generate_columns(gender):
+            age_range_group = male_range_group if gender is "male" else female_range_group
             return [
                 AggregateColumn("0-10", percent_fn,
                                 [CountColumn("age", alias="zero_ten_" + gender, filters=age_range_filter(gender, "zero", "ten")),
@@ -168,6 +170,6 @@ class GSIDSQLByAgeReport(GSIDSQLReport):
                                 header_group=age_range_group),
             ]
 
-        return [DatabaseColumn("Clinic Name", SimpleColumn("clinic"), header_group=age_range_group)
+        return [DatabaseColumn("Clinic Name", SimpleColumn("clinic"))
                ] + generate_columns("male") + generate_columns("female")
 
