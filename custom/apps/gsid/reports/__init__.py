@@ -1,8 +1,10 @@
-from corehq.apps.reports.datatables import DataTablesHeader, DataTablesColumn, DataTablesColumnGroup
 from corehq.apps.fixtures.models import FixtureDataItem, FixtureDataType
-from corehq.apps.reports.standard import CustomProjectReport, DatespanMixin
 from corehq.apps.reports.basic import Column, FunctionView, SummingTabularReport, BasicTabularReport
+from corehq.apps.reports.datatables import DataTablesHeader, DataTablesColumn, DataTablesColumnGroup
 from corehq.apps.reports.fields import AsyncDrillableField, ReportSelectField
+from corehq.apps.reports.filters.base import BaseSingleOptionFilter, BaseDrilldownOptionFilter
+from corehq.apps.reports.filters.fixtures import AsyncDrillableFilter
+from corehq.apps.reports.standard import CustomProjectReport, DatespanMixin
 from util import get_unique_combinations
 from couchdbkit_aggregate.fn import mean, min, max
 from dimagi.utils.decorators.memoized import memoized
@@ -13,7 +15,7 @@ class AsyncTestField(AsyncDrillableField):
     hierarchy = [{"type": "diseases", "display": "disease_name"},
                  {"type": "tests", "parent_ref": "disease_id", "references": "test_name", "display": "visible_test_name"}]
 
-class AsyncClinicField(AsyncDrillableField):
+class AsyncClinicField(AsyncDrillableFilter):
     label = "Country/Province/District/Clinic"
     slug = "clinic"
     hierarchy = [{"type": "country", "display": "country_name"},
@@ -21,6 +23,37 @@ class AsyncClinicField(AsyncDrillableField):
                  {"type": "district", "parent_ref": "province_id", "references": "province_id", "display": "district_name"},
                  {"type": "clinic", "parent_ref": "district_id", "references": "district_id", "display": "clinic_name"}]
 
+class TestField(BaseDrilldownOptionFilter):
+    label = "Disease/Test Type"
+    slug = "test_type"
+
+    @property
+    def drilldown_map(self):
+        diseases = []
+        disease_fixtures = FixtureDataItem.by_data_type(self.domain, 
+                                           FixtureDataType.by_domain_tag(self.domain, "diseases").one())
+        for d in disease_fixtures:
+            disease = dict(val="diseases:" + d.get_id, text=d.fields["disease_name"])
+            tests = []
+            test_fixtures = FixtureDataItem.by_field_value(
+                                self.domain, 
+                                FixtureDataType.by_domain_tag(self.domain, "tests").one(),
+                                "disease_id",
+                                d.fields["disease_id"])
+            for t in test_fixtures:
+                tests.append(dict(val="tests:" + str(t.get_id), text=t.fields["visible_test_name"]))
+
+            disease['next'] = tests
+            diseases.append(disease)
+
+        return diseases
+
+    @classmethod
+    def get_labels(cls):
+        return [
+            ('Disease', 'All diseases', 'disease'),
+            ('Test Type', 'All test types', 'test'),
+        ]
 
 @memoized
 def get_village_fdt(domain):
