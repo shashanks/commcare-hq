@@ -12,7 +12,7 @@ from dimagi.utils.decorators.memoized import memoized
 
 
 class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin):
-    fields = ['custom.apps.gsid.reports.AsyncTestField', DatespanMixin.datespan_field, 'custom.apps.gsid.reports.AsyncClinicField']
+    fields = ['custom.apps.gsid.reports.TestField', DatespanMixin.datespan_field, 'custom.apps.gsid.reports.AsyncClinicField']
 
     name = "Basic sql report"
     exportable = True
