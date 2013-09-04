@@ -12,7 +12,10 @@ from dimagi.utils.decorators.memoized import memoized
 
 
 class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin):
-    fields = ['custom.apps.gsid.reports.TestField', DatespanMixin.datespan_field, 'custom.apps.gsid.reports.AsyncClinicField']
+    fields = ['custom.apps.gsid.reports.TestField', 
+              DatespanMixin.datespan_field, 
+              'custom.apps.gsid.reports.AsyncClinicField',
+              'custom.apps.gsid.reports.AggregateAtField']
 
     name = "Basic sql report"
     exportable = True
@@ -20,10 +23,7 @@ class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin)
     slug = "my_basic_sql"
     section_name = "event demonstrations"
     table_name = "gsid_patient_summary"
-
-    @property
-    def group_by(self):
-        return ["clinic"]
+    default_aggregation = "clinic"
 
     @property
     def filter_values(self):
@@ -32,15 +32,24 @@ class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin)
                     enddate=self.datespan.enddate_param_utc,
                     male="male",
                     female="female",
-                    positive="Positive")
+                    positive="Positive",
+                    test="Paracheck_Malaria_Pf")
 
     @property
     def filters(self):
-        return ["date between :startdate and :enddate"]
+        return [EQ("domain", "domain"), BETWEEN("date", "startdate", "enddate")]
+
+    @property
+    def group_by(self):
+        return self.place_types
+        return ["clinic"]
 
     @property
     def keys(self):
-        return [['highpoint'], ['high_point']]
+        combos = get_unique_combinations(self.domain, place_types=self.place_types, place=self.selected_fixture())
+        for c in combos:
+            yield [c[pt] for pt in self.place_types]
+        #return [['highpoint'], ['high_point']]
 
     def selected_fixture(self):
         fixture = self.request.GET.get('fixture_id', "")
@@ -49,10 +58,25 @@ class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin)
     @property
     @memoized
     def place_types(self):
-        opts = ['state', 'district', 'block', 'village']
+        opts = ['country', 'province', 'district', 'clinic']
         agg_at = self.request.GET.get('aggregate_at', None)
-        agg_at = agg_at if agg_at and opts.index(agg_at) <= opts.inAliasColumndex(self.default_aggregation) else self.default_aggregation
+        agg_at = agg_at if agg_at and opts.index(agg_at) <= opts.index(self.default_aggregation) else self.default_aggregation
         return opts[:opts.index(agg_at) + 1]
+
+    @property
+    def common_filters(self):
+        disease = self.request.GET.get('test_type_disease', '')
+        test = self.request.GET.get('test_type_test', '')
+        disease = disease.split(':') if disease else None
+        test = test.split(':') if test else None
+
+    @property
+    def common_columns(self):
+        columns = []
+        for place in self.place_types:
+            columns.append(DatabaseColumn(place.capitalize(), SimpleColumn(place)))
+
+        return columns
 
 class GSIDSQLPatientReport(GSIDSQLReport):
 
@@ -71,25 +95,24 @@ class GSIDSQLPatientReport(GSIDSQLReport):
         positive_group = DataTablesColumnGroup("Positive Tests")
         age_range_group = DataTablesColumnGroup("Age Range")
 
-        return [
-            DatabaseColumn("Clinic Name", SimpleColumn("clinic")),
+        return self.common_columns + [
             
             DatabaseColumn("Number of Males ", 
-                            CountColumn('gender', alias="male-total", filters=[EQ("gender", "male")]), 
+                            CountColumn('gender', alias="male-total", filters= self.filters + [EQ("gender", "male")]), 
                             header_group=patient_number_group),
             DatabaseColumn("Number of Females ", 
-                            CountColumn('gender', alias="female-total", filters=[EQ("gender", "female")]), 
+                            CountColumn('gender', alias="female-total", filters= self.filters + [EQ("gender", "female")]), 
                             header_group=patient_number_group),
             AggregateColumn("Total", sum_fn, 
                             [AliasColumn("male-total"), AliasColumn("female-total")],
                             header_group=patient_number_group),
 
             AggregateColumn("Male +ve Percent", percent_agg_fn,
-                            [CountColumn("diagnosis", alias="male-positive", filters=[AND([EQ("gender", "male"), EQ("diagnosis", "positive")])]), 
+                            [CountColumn("diagnosis", alias="male-positive", filters= self.filters + [AND([EQ("gender", "male"), EQ("diagnosis", "positive")])]), 
                              AliasColumn("male-total"), AliasColumn("female-total")],
                             header_group=positive_group),
             AggregateColumn("Female +ve Percent", percent_agg_fn,
-                            [CountColumn("diagnosis", alias="female-positive", filters=[AND([EQ("gender", "female"), EQ("diagnosis", "positive")])]), 
+                            [CountColumn("diagnosis", alias="female-positive", filters= self.filters + [AND([EQ("gender", "female"), EQ("diagnosis", "positive")])]), 
                              AliasColumn("male-total"), AliasColumn("female-total")],
                             header_group=positive_group),
             AggregateColumn("Total +ve Percent", total_percent_agg_fn,
@@ -99,16 +122,16 @@ class GSIDSQLPatientReport(GSIDSQLReport):
                             header_group=positive_group),
 
             AggregateColumn("Male age range", age_fn,
-                            [MinColumn("age", alias="male-min", filters=[EQ("gender", "male")]),
-                             MaxColumn("age", alias="male-max", filters=[EQ("gender", "male")])],
+                            [MinColumn("age", alias="male-min", filters= self.filters + [EQ("gender", "male")]),
+                             MaxColumn("age", alias="male-max", filters= self.filters + [EQ("gender", "male")])],
                             header_group=age_range_group),
             AggregateColumn("FeMale age range", age_fn,
-                            [MinColumn("age", alias="female-min", filters=[EQ("gender", "female")]),
-                             MaxColumn("age", alias="female-max", filters=[EQ("gender", "female")])],
+                            [MinColumn("age", alias="female-min", filters= self.filters + [EQ("gender", "female")]),
+                             MaxColumn("age", alias="female-max", filters= self.filters + [EQ("gender", "female")])],
                             header_group=age_range_group),
             AggregateColumn("All age range", age_fn,
-                            [MinColumn("age", alias="age-min"),
-                             MaxColumn("age", alias="age-max")],
+                            [MinColumn("age", alias="age-min", filters= self.filters + [OR([EQ("gender", "female"), EQ("gender", "male")])]),
+                             MaxColumn("age", alias="age-max", filters= self.filters + [OR([EQ("gender", "female"), EQ("gender", "male")])])],
                             header_group=age_range_group),
         ]
 
@@ -153,23 +176,21 @@ class GSIDSQLByAgeReport(GSIDSQLReport):
             age_range_group = male_range_group if gender is "male" else female_range_group
             return [
                 AggregateColumn("0-10", percent_fn,
-                                [CountColumn("age", alias="zero_ten_" + gender, filters=age_range_filter(gender, "zero", "ten")),
-                                 CountColumn("age", alias=gender+"_total", filters=[EQ("gender", gender)])],
+                                [CountColumn("age", alias="zero_ten_" + gender, filters= self.filters + age_range_filter(gender, "zero", "ten")),
+                                 CountColumn("age", alias=gender+"_total", filters= self.filters + [EQ("gender", gender)])],
                                 header_group=age_range_group),
                 AggregateColumn("10-20", percent_fn, 
-                                [CountColumn("age", alias="ten_twenty_" + gender, filters=age_range_filter(gender, "ten_plus", "twenty")),
+                                [CountColumn("age", alias="ten_twenty_" + gender, filters= self.filters + age_range_filter(gender, "ten_plus", "twenty")),
                                  AliasColumn(gender+"_total")],
                                 header_group=age_range_group),
                 AggregateColumn("20-50", percent_fn,
-                                [CountColumn("age", alias="twenty_fifty_" + gender, filters=age_range_filter(gender, "twenty_plus", "fifty")),
+                                [CountColumn("age", alias="twenty_fifty_" + gender, filters= self.filters + age_range_filter(gender, "twenty_plus", "fifty")),
                                 AliasColumn(gender+"_total")],
                                 header_group=age_range_group),
                 AggregateColumn("50+", percent_fn,
-                                [CountColumn("age", alias="fifty_" + gender, filters=[AND([EQ("gender", gender), EQ("diagnosis", "positive"), GT("age", "fifty")])]),
+                                [CountColumn("age", alias="fifty_" + gender, filters= self.filters + [AND([EQ("gender", gender), EQ("diagnosis", "positive"), GT("age", "fifty")])]),
                                 AliasColumn(gender+"_total")],
                                 header_group=age_range_group),
             ]
 
-        return [DatabaseColumn("Clinic Name", SimpleColumn("clinic"))
-               ] + generate_columns("male") + generate_columns("female")
-
+        return self.common_columns + generate_columns("male") + generate_columns("female")
