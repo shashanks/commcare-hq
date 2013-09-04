@@ -30,18 +30,26 @@ class TestField(BaseDrilldownOptionFilter):
     @property
     def drilldown_map(self):
         diseases = []
-        disease_fixtures = FixtureDataItem.by_data_type(self.domain, 
-                                           FixtureDataType.by_domain_tag(self.domain, "diseases").one())
+        disease_fixtures = FixtureDataItem.by_data_type(
+                                self.domain, 
+                                FixtureDataType.by_domain_tag(self.domain, "diseases").one())
         for d in disease_fixtures:
-            disease = dict(val="diseases:" + d.get_id, text=d.fields["disease_name"])
+            disease = dict(
+                        val= "%(name)s:%(uid)s" % {'name': d.fields["disease_id"], 'uid': d.get_id}, 
+                        text=d.fields["disease_name"]
+                      )
             tests = []
             test_fixtures = FixtureDataItem.by_field_value(
                                 self.domain, 
                                 FixtureDataType.by_domain_tag(self.domain, "tests").one(),
                                 "disease_id",
-                                d.fields["disease_id"])
+                                d.fields["disease_id"]
+                            )
             for t in test_fixtures:
-                tests.append(dict(val="tests:" + str(t.get_id), text=t.fields["visible_test_name"]))
+                tests.append(dict(
+                                val = "%(name)s:%(uid)s" % {'name': t.fields["test_name"], 'uid': t.get_id}, 
+                                text = t.fields["visible_test_name"])
+                            )
 
             disease['next'] = tests
             diseases.append(disease)
@@ -55,106 +63,18 @@ class TestField(BaseDrilldownOptionFilter):
             ('Test Type', 'All test types', 'test'),
         ]
 
-@memoized
-def get_village_fdt(domain):
-    return FixtureDataType.by_domain_tag(domain, 'village').one()
-
-@memoized
-def get_village(req, id):
-    village_fdt = get_village_fdt(req.domain)
-    return FixtureDataItem.by_field_value(req.domain, village_fdt, 'id', float(id)).one()
-
-def get_village_name(key, req):
-    return get_village(req, key[4]).fields.get("name", id)
-
-def get_village_class(key, req):
-    return get_village(req, key[4]).fields.get("village_class", "No data")
-
-class GSIDExReport(SummingTabularReport, CustomProjectReport, DatespanMixin):
-    is_cacheable = True
-    update_after = True
-    fields = ['corehq.apps.reports.fields.DatespanField','GSID.reports.AsyncClinicField',]
-
-    state_name = Column("State", calculate_fn=lambda key, _: key[1])
-
-    district_name = Column("District", calculate_fn=lambda key, _: key[2])
-
-    block_name = Column("Block", calculate_fn=lambda key, _: key[3])
-
-    village_name = Column("Village", calculate_fn=get_village_name)
-
-    village_code = Column("Village Code", calculate_fn=lambda key, _: key[4])
-
-    village_class = Column("Village Class", calculate_fn =get_village_class)
-
-    def selected_fixture(self):
-        fixture = self.request.GET.get('fixture_id', "")
-        return fixture.split(':') if fixture else None
+class AggregateAtField(ReportSelectField):
+    slug = "aggregate_at"
+    name = "Aggregate at what level"
+    cssId = "aggregate_at_select"
+    cssClasses = "span2"
+    field_opts = ["Country", "Province", "District", "Clinic"]
 
     @property
-    @memoized
-    def place_types(self):
-        opts = ['state', 'district', 'block', 'village']
-        agg_at = self.request.GET.get('aggregate_at', None)
-        agg_at = agg_at if agg_at and opts.index(agg_at) <= opts.index(self.default_aggregation) else self.default_aggregation
-        return opts[:opts.index(agg_at) + 1]
+    def default_option(self):
+        return "Default: %s" % self.field_opts[-1]
 
-    @property
-    def initial_column_order(self):
-        ret = tuple([col + '_name' for col in self.place_types[:3]])
-        if len(self.place_types) > 3:
-            ret += ('village_name', 'village_code', 'village_class')
-        return ret
+    def update_params(self):
+        self.selected = self.request.GET.get(self.slug, '')
+        self.options = [{'val': f.lower(), 'text': f} for f in [fo for fo in self.field_opts if fo != self.selected]]
 
-    @property
-    def start_and_end_keys(self):
-        return ([self.datespan.startdate_param_utc],
-                [self.datespan.enddate_param_utc])
-
-    @property
-    def keys(self):
-        combos = get_unique_combinations(self.domain, place_types=self.place_types, place=self.selected_fixture())
-        for c in combos:
-            yield [self.domain] + [c[pt] for pt in self.place_types]
-
-
-class GSIDReport(BasicTabularReport, CustomProjectReport, DatespanMixin):
-    name = "My Basic Report"
-    slug = "my_basic_report"
-    fields = ['custom.apps.gsid.reports.AsyncTestField', DatespanMixin.datespan_field, 'custom.apps.gsid.reports.AsyncClinicField']
-
-    couch_view = 'gsid/patient_summary'    
-    @property
-    def keys(self):
-        return [[self.domain, 'female', "highpoint"], [self.domain, 'male', "highpoint"]]
-
-    @property
-    def start_and_end_keys(self):
-        return ([self.datespan.startdate_param_utc],
-                [self.datespan.enddate_param_utc])
-
-    @property
-    def default_column_order(self):
-        return ('clinic_name', 'gender', 'min_age', 'max_age')
-
-    clinic_name = Column("Clinic", calculate_fn=lambda key, _: key[2])
-    min_age = Column("Min Age", key="num", reduce_fn=min)
-    max_age = Column("Max Age", key="num", reduce_fn=max)
-    gender = Column("Gender", calculate_fn=lambda key, _: key[1])
-
-
-    """    
-    @property
-    def headers(self):
-        return DataTablesHeader(DataTablesColumn("Col A"),
-                                DataTablesColumnGroup("Goup 1", DataTablesColumn("Col B"),
-                                                      DataTablesColumn("Col C")),
-                                DataTablesColumn("Col D"))
-
-    @property
-    def rows(self):
-        return [
-            ['Row 1', 2, 3, 4],
-            ['Row 2', 3, 2, 1]
-        ]
-    """
