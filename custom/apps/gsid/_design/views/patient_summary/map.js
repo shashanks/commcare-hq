@@ -8,7 +8,7 @@ function (doc) {
 
         emit(
             [doc.domain,
-            form["@name"],
+            form.disease,
             form.test_version,
             form.country,
             form.province,

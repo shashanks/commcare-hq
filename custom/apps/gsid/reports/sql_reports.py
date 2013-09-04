@@ -27,17 +27,47 @@ class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin)
 
     @property
     def filter_values(self):
-        return dict(domain=self.domain,
-                    startdate=self.datespan.startdate_param_utc,
-                    enddate=self.datespan.enddate_param_utc,
-                    male="male",
-                    female="female",
-                    positive="Positive",
-                    test="Paracheck_Malaria_Pf")
+        ret = dict(domain=self.domain,
+                   startdate=self.datespan.startdate_param_utc,
+                   enddate=self.datespan.enddate_param_utc,
+                   male="male",
+                   female="female",
+                   positive="Positive"
+                )
+
+        disease_fixtures = FixtureDataItem.by_data_type(
+                                self.domain, 
+                                FixtureDataType.by_domain_tag(self.domain, "diseases").one()
+                        )
+        test_fixtures = FixtureDataItem.by_data_type(
+                            self.domain, 
+                            FixtureDataType.by_domain_tag(self.domain, "tests").one()
+                        )
+        DISEASES = [d.fields["disease_id"] for d in disease_fixtures]
+        TESTS = [t.fields["test_name"] for t in test_fixtures]
+
+        ret.update(zip(DISEASES, DISEASES))
+        ret.update(zip(TESTS, TESTS))
+
+        return ret
 
     @property
     def filters(self):
-        return [EQ("domain", "domain"), BETWEEN("date", "startdate", "enddate")]
+        return [EQ("domain", "domain"), BETWEEN("date", "startdate", "enddate")] + self.disease_filters
+
+    @property
+    def disease_filters(self):
+        disease = self.request.GET.get('test_type_disease', '')
+        test = self.request.GET.get('test_type_test', '')
+        disease = disease.split(':') if disease else None
+        test = test.split(':') if test else None
+        filters = []
+        if test:
+            filters.append(EQ("test_version", test[0]))
+        elif disease:
+            filters.append(EQ("disease_name", disease[0]))
+
+        return filters
 
     @property
     def group_by(self):
@@ -62,13 +92,6 @@ class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin)
         agg_at = self.request.GET.get('aggregate_at', None)
         agg_at = agg_at if agg_at and opts.index(agg_at) <= opts.index(self.default_aggregation) else self.default_aggregation
         return opts[:opts.index(agg_at) + 1]
-
-    @property
-    def common_filters(self):
-        disease = self.request.GET.get('test_type_disease', '')
-        test = self.request.GET.get('test_type_test', '')
-        disease = disease.split(':') if disease else None
-        test = test.split(':') if test else None
 
     @property
     def common_columns(self):
