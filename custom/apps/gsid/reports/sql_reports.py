@@ -199,8 +199,25 @@ class GSIDSQLByDayReport(GSIDSQLReport):
         group_by = self.group_by[:-1]
         for place in group_by:
             column_headers.append(DataTablesColumn(place))
+
+        prev_month = startdate.month
+        month_columns = [startdate.strftime("%B %Y")]
         for n, day in enumerate(self.daterange(startdate, enddate)):
-            column_headers.append(DataTablesColumn("Day%(n)s (%(day)s)" % {'n':n, 'day': day}))
+            day_obj = datetime.strptime(day, "%Y-%m-%d")
+            month = day_obj.month
+            day_column = DataTablesColumn("Day%(n)s (%(day)s)" % {'n':n+1, 'day': day})
+
+            if month == prev_month:
+                month_columns.append(day_column)
+            else:
+                month_group = DataTablesColumnGroup(*month_columns)
+                column_headers.append(month_group)
+                month_columns = [day_obj.strftime("%B %Y")]
+                month_columns.append(day_column)
+                prev_month = month
+        
+        month_group = DataTablesColumnGroup(*month_columns)
+        column_headers.append(month_group)
 
         return DataTablesHeader(*column_headers)
 
