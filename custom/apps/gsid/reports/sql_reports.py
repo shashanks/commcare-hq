@@ -270,16 +270,19 @@ class GSIDSQLTestLotsReport(GSIDSQLReport):
         old_data = self.data
         lots_map = dict()
         for key in old_data.keys():
-            if lots_map.get(key[4], None):
-                lots_map[key[4]].append(key[5])
+            if lots_map.get(key[-2], None):
+                lots_map[key[-2]].append(key[-1])
             else:
-                lots_map[key[4]] = [key[5]]
+                lots_map[key[-2]] = [key[-1]]
         return lots_map
 
     @property
     def selected_tests(self):
         disease = self.request.GET.get('test_type_disease', '')
         test = self.request.GET.get('test_type_test', '')
+
+        disease = disease.split(':') if disease else None
+        test = test.split(':') if test else None
 
         if test:
             return [test[0]]
@@ -298,12 +301,12 @@ class GSIDSQLTestLotsReport(GSIDSQLReport):
     @property
     def rows(self):
         test_lots_map = self.test_lots_map
+        selected_tests = self.selected_tests
         old_data = self.data
-
         rows = []
         for loc_key in self.keys:
             row = [loc for loc in loc_key]
-            for test in self.selected_tests:
+            for test in selected_tests:
                 test_lots = test_lots_map.get(test, None)
                 if not test_lots:
                     row.append(self.no_value)
@@ -317,7 +320,7 @@ class GSIDSQLTestLotsReport(GSIDSQLReport):
                     total_test_count += data_map["lot_count"] if data_map else 0
                 row.append(total_test_count or self.no_value)
             rows.append(row)
-
+        
         return rows
 
     @property
