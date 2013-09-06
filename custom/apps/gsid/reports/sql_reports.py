@@ -101,6 +101,8 @@ class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin)
         opts = ['country', 'province', 'district', 'clinic']
         agg_at = self.request.GET.get('aggregate_at', None)
         agg_at = agg_at if agg_at and opts.index(agg_at) <= opts.index(self.default_aggregation) else self.default_aggregation
+        place = self.selected_fixture()
+        agg_at = place[0] if place and opts.index(agg_at) < opts.index(place[0]) else agg_at 
         return opts[:opts.index(agg_at) + 1]
 
     @property
