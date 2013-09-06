@@ -27,6 +27,22 @@ class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin)
     default_aggregation = "clinic"
 
     @property
+    def diseases(self):
+        disease_fixtures = FixtureDataItem.by_data_type(
+                                self.domain, 
+                                FixtureDataType.by_domain_tag(self.domain, "diseases").one()
+                        )
+        return [d.fields["disease_id"] for d in disease_fixtures]
+
+    @property
+    def test_types(self):
+        test_fixtures = FixtureDataItem.by_data_type(
+                            self.domain, 
+                            FixtureDataType.by_domain_tag(self.domain, "tests").one()
+                        )        
+        return [t.fields["test_name"] for t in test_fixtures]
+
+    @property
     def filter_values(self):
         ret = dict(domain=self.domain,
                    startdate=self.datespan.startdate_param_utc,
@@ -36,16 +52,8 @@ class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin)
                    positive="Positive"
                 )
 
-        disease_fixtures = FixtureDataItem.by_data_type(
-                                self.domain, 
-                                FixtureDataType.by_domain_tag(self.domain, "diseases").one()
-                        )
-        test_fixtures = FixtureDataItem.by_data_type(
-                            self.domain, 
-                            FixtureDataType.by_domain_tag(self.domain, "tests").one()
-                        )
-        DISEASES = [d.fields["disease_id"] for d in disease_fixtures]
-        TESTS = [t.fields["test_name"] for t in test_fixtures]
+        DISEASES = self.diseases
+        TESTS = self.test_types
 
         ret.update(zip(DISEASES, DISEASES))
         ret.update(zip(TESTS, TESTS))
@@ -60,8 +68,10 @@ class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin)
     def disease_filters(self):
         disease = self.request.GET.get('test_type_disease', '')
         test = self.request.GET.get('test_type_test', '')
+        
         disease = disease.split(':') if disease else None
         test = test.split(':') if test else None
+        
         filters = []
         if test:
             filters.append(EQ("test_version", test[0]))
@@ -73,7 +83,6 @@ class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin)
     @property
     def group_by(self):
         return self.place_types
-        return ["clinic"]
 
     @property
     def keys(self):
@@ -240,36 +249,94 @@ class GSIDSQLByDayReport(GSIDSQLReport):
 
         return rows
 
-    """
-    @property
-    def columns(self):
-        def daterange(start_date, end_date):
-            for n in range(int ((end_date - start_date).days)):
-                yield (start_date + timedelta(n)).strftime("%Y-%m-%d")
-    
-        default_filter_values = super(GSIDSQLByDayReport, self).filter_values
-        print default_filter_values["startdate"]   
-        startdate = datetime.strptime(default_filter_values["startdate"], "%Y-%m-%dT%H:%M:%S")
-        enddate = datetime.strptime(default_filter_values["enddate"], "%Y-%m-%dT%H:%M:%S")
-    
-        columns = self.common_columns
-        for n, day in enumerate(daterange(startdate, enddate)):
-            default_filter_values["startdate"] = day
-            default_filter_values["enddate"] = day
-            self.filter_values = default_filter_values
-            db_column = DatabaseColumn(
-                            "Day%(n)s (%(day)s)" % {'n':n, 'day': day},
-                            CountColumn("date", alias="day"+str(n), filters=self.filters)
-                        )
-            columns.append(db_column)
-
-        return columns"""
-
     
 class GSIDSQLTestLotsReport(GSIDSQLReport):
     name = "Test Lots Report"
     slug = "test_lots_sql"
     section_name = "test lots"
+
+    @property
+    def group_by(self):
+        return super(GSIDSQLTestLotsReport, self).group_by + ["test_version", "lot_number"]
+
+    @property
+    def columns(self):
+        return self.common_columns + [
+            DatabaseColumn("Test", CountColumn("gender", alias="lot_count"))
+        ]
+
+    @property
+    def test_lots_map(self):
+        old_data = self.data
+        lots_map = dict()
+        for key in old_data.keys():
+            if lots_map.get(key[4], None):
+                lots_map[key[4]].append(key[5])
+            else:
+                lots_map[key[4]] = [key[5]]
+        return lots_map
+
+    @property
+    def selected_tests(self):
+        disease = self.request.GET.get('test_type_disease', '')
+        test = self.request.GET.get('test_type_test', '')
+
+        if test:
+            return [test[0]]
+        elif disease:
+            test_fixtures = FixtureDataItem.by_field_value(
+                                self.domain, 
+                                FixtureDataType.by_domain_tag(self.domain, "tests").one(),
+                                "disease_id",
+                                disease[0]
+                            )
+            return [t.fields["test_name"] for t in test_fixtures]
+        else:
+            return self.test_types         
+
+    
+    @property
+    def rows(self):
+        test_lots_map = self.test_lots_map
+        old_data = self.data
+
+        rows = []
+        for loc_key in self.keys:
+            row = [loc for loc in loc_key]
+            for test in self.selected_tests:
+                test_lots = test_lots_map.get(test, None)
+                if not test_lots:
+                    row.append(self.no_value)
+                    continue
+                total_test_count = 0
+                for lot_number in test_lots:
+                    temp_key = [loc for loc in loc_key] + [test, lot_number]
+                    data_map = old_data.get(tuple(temp_key), None)
+                    lot_count = data_map["lot_count"] if data_map else self.no_value
+                    row.append(lot_count)
+                    total_test_count += data_map["lot_count"] if data_map else 0
+                row.append(total_test_count or self.no_value)
+            rows.append(row)
+
+        return rows
+
+    @property
+    def headers(self):
+        column_headers = [ DataTablesColumn(loc) for loc in self.group_by[:-2]]
+        test_lots_map = self.test_lots_map
+        for test in self.selected_tests:
+            lots_headers = [test]
+            lots = test_lots_map.get(test, None)
+            if not lots:
+                lots_headers.append(DataTablesColumn("NO-LOTS"))
+                column_headers.append(DataTablesColumnGroup(*lots_headers))
+                continue
+            for lot in lots:
+                lots_headers.append(DataTablesColumn(str(lot)))
+            lots_headers.append(DataTablesColumn("TOTAL"))
+            column_headers.append(DataTablesColumnGroup(*lots_headers))
+
+        return DataTablesHeader(*column_headers)
     
 class GSIDSQLByAgeReport(GSIDSQLReport):
     name = "Age Summary Report"
