@@ -29,7 +29,7 @@ def get_unique_combinations(domain, place_types=None, place=None):
             else:
                 rel_type_name = fdi.fields.get(place_type+"_id", "")
                 if not rel_type_name:
-                    logging.error("PSI Reports Error: fixture_id: %s -- place_type: %s" % (fdi.get_id, place_type))
+                    logging.error("GSID Reports Error: fixture_id: %s -- place_type: %s" % (fdi.get_id, place_type))
                     continue
                 if rel_type_name.lower() != place_name:
                     continue
