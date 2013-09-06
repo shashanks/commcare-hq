@@ -4,12 +4,13 @@ from sqlagg.filters import *
 from sqlalchemy import func
 from corehq.apps.fixtures.models import FixtureDataItem, FixtureDataType
 from corehq.apps.reports.basic import Column
-from corehq.apps.reports.datatables import DataTablesColumnGroup
+from corehq.apps.reports.datatables import DataTablesColumn, DataTablesHeader, DataTablesColumnGroup
 from corehq.apps.reports.sqlreport import SqlTabularReport, DatabaseColumn, SummingSqlTabularReport, AggregateColumn
 from corehq.apps.reports.standard import CustomProjectReport, DatespanMixin
 from util import get_unique_combinations
 from dimagi.utils.decorators.memoized import memoized
 
+from datetime import datetime, timedelta
 
 class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin):
     fields = ['custom.apps.gsid.reports.TestField', 
@@ -162,6 +163,91 @@ class GSIDSQLByDayReport(GSIDSQLReport):
     name = "Day Summary Report"
     slug = "day_summary_sql"
     section_name = "day summary"
+
+    @property
+    def group_by(self):
+        return super(GSIDSQLByDayReport, self).group_by + ["date"]
+
+    @property
+    def columns(self):
+        return self.common_columns + [
+                DatabaseColumn("Count", CountColumn("age", alias="day_count"))
+            ]
+
+    @property
+    def startdate_obj(self):
+        default_filter_values = super(GSIDSQLByDayReport, self).filter_values
+        startdate = datetime.strptime(default_filter_values["startdate"], "%Y-%m-%dT%H:%M:%S")
+        return startdate
+
+    @property
+    def enddate_obj(self):
+        default_filter_values = super(GSIDSQLByDayReport, self).filter_values
+        enddate = datetime.strptime(default_filter_values["enddate"], "%Y-%m-%dT%H:%M:%S")
+        return enddate
+
+    def daterange(self, start_date, end_date):
+        for n in range(int ((end_date - start_date).days)):
+            yield (start_date + timedelta(n)).strftime("%Y-%m-%d")
+
+    @property
+    def headers(self):
+        startdate = self.startdate_obj
+        enddate = self.enddate_obj
+
+        column_headers = []
+        group_by = self.group_by[:-1]
+        for place in group_by:
+            column_headers.append(DataTablesColumn(place))
+        for n, day in enumerate(self.daterange(startdate, enddate)):
+            column_headers.append(DataTablesColumn("Day%(n)s (%(day)s)" % {'n':n, 'day': day}))
+
+        return DataTablesHeader(*column_headers)
+
+    @property
+    def rows(self):
+        startdate = self.startdate_obj
+        enddate = self.enddate_obj
+
+        old_data = self.data
+        rows = []
+        for loc_key in self.keys:
+            row = [x for x in loc_key]
+            for n, day in enumerate(self.daterange(startdate, enddate)):
+                temp_key = [loc for loc in loc_key]
+                temp_key.append(datetime.strptime(day, "%Y-%m-%d").date())
+                keymap = old_data.get(tuple(temp_key), None)
+                day_count = (keymap["day_count"] if keymap else None) or self.no_value
+                row.append(day_count)
+            rows.append(row)
+
+        return rows
+
+    """
+    @property
+    def columns(self):
+        def daterange(start_date, end_date):
+            for n in range(int ((end_date - start_date).days)):
+                yield (start_date + timedelta(n)).strftime("%Y-%m-%d")
+    
+        default_filter_values = super(GSIDSQLByDayReport, self).filter_values
+        print default_filter_values["startdate"]   
+        startdate = datetime.strptime(default_filter_values["startdate"], "%Y-%m-%dT%H:%M:%S")
+        enddate = datetime.strptime(default_filter_values["enddate"], "%Y-%m-%dT%H:%M:%S")
+    
+        columns = self.common_columns
+        for n, day in enumerate(daterange(startdate, enddate)):
+            default_filter_values["startdate"] = day
+            default_filter_values["enddate"] = day
+            self.filter_values = default_filter_values
+            db_column = DatabaseColumn(
+                            "Day%(n)s (%(day)s)" % {'n':n, 'day': day},
+                            CountColumn("date", alias="day"+str(n), filters=self.filters)
+                        )
+            columns.append(db_column)
+
+        return columns"""
+
     
 class GSIDSQLTestLotsReport(GSIDSQLReport):
     name = "Test Lots Report"
