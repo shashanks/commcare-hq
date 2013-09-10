@@ -3,6 +3,7 @@ from corehq.apps.reports.basic import Column, FunctionView, SummingTabularReport
 from corehq.apps.reports.datatables import DataTablesHeader, DataTablesColumn, DataTablesColumnGroup
 from corehq.apps.reports.fields import AsyncDrillableField, ReportSelectField
 from corehq.apps.reports.filters.base import BaseSingleOptionFilter, BaseDrilldownOptionFilter
+from corehq.apps.reports.filters.dates import DatespanFilter
 from corehq.apps.reports.filters.fixtures import AsyncDrillableFilter
 from corehq.apps.reports.standard import CustomProjectReport, DatespanMixin
 from util import get_unique_combinations
@@ -78,3 +79,5 @@ class AggregateAtField(ReportSelectField):
         self.selected = self.request.GET.get(self.slug, '')
         self.options = [{'val': f.lower(), 'text': f} for f in [fo for fo in self.field_opts if fo != self.selected]]
 
+class RelativeDatespanField(DatespanFilter):
+    template = "relative_date.html"
