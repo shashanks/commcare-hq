@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 
 class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin):
     fields = ['custom.apps.gsid.reports.TestField', 
-              DatespanMixin.datespan_field, 
+              'custom.apps.gsid.reports.RelativeDatespanField', 
               'custom.apps.gsid.reports.AsyncClinicField',
               'custom.apps.gsid.reports.AggregateAtField']
 
