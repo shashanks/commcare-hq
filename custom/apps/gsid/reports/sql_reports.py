@@ -5,6 +5,7 @@ from sqlalchemy import func
 from corehq.apps.fixtures.models import FixtureDataItem, FixtureDataType
 from corehq.apps.reports.basic import Column
 from corehq.apps.reports.datatables import DataTablesColumn, DataTablesHeader, DataTablesColumnGroup
+from corehq.apps.reports.graph_models import MultiBarChart, Axis
 from corehq.apps.reports.sqlreport import SqlTabularReport, DatabaseColumn, SummingSqlTabularReport, AggregateColumn
 from corehq.apps.reports.standard import CustomProjectReport, DatespanMixin
 from util import get_unique_combinations
@@ -113,6 +114,7 @@ class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin)
 
         return columns
 
+
 class GSIDSQLPatientReport(GSIDSQLReport):
 
     name = "Patient Summary Report"
@@ -169,6 +171,17 @@ class GSIDSQLPatientReport(GSIDSQLReport):
                              MaxColumn("age", alias="age-max", filters= self.filters + [OR([EQ("gender", "female"), EQ("gender", "male")])])],
                             header_group=age_range_group),
         ]
+
+    @property
+    def charts(self):
+        rows = super(GSIDSQLPatientReport, self).rows
+        loc_axis = Axis(label="Location")
+        tests_axis = Axis(label="Number of Tests")
+        chart = MultiBarChart("A sample graph", loc_axis, tests_axis)
+        chart.stacked = True
+        chart.add_dataset("Male Tests", [{'x':row[-10] , 'y':row[-9]['html'] if row[-9] != "--" else 0} for row in rows], color="#1f07b4")
+        chart.add_dataset("Female Tests", [{'x':row[-10] , 'y':row[-8]['html'] if row[-8] != "--" else 0} for row in rows], color="#1077b4")
+        return [chart]
 
 class GSIDSQLByDayReport(GSIDSQLReport):
     name = "Day Summary Report"
@@ -248,7 +261,6 @@ class GSIDSQLByDayReport(GSIDSQLReport):
                 day_count = (keymap["day_count"] if keymap else None) or self.no_value
                 row.append(day_count)
             rows.append(row)
-
         return rows
 
     
