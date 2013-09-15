@@ -5,7 +5,7 @@ from sqlalchemy import func
 from corehq.apps.fixtures.models import FixtureDataItem, FixtureDataType
 from corehq.apps.reports.basic import Column
 from corehq.apps.reports.datatables import DataTablesColumn, DataTablesHeader, DataTablesColumnGroup
-from corehq.apps.reports.graph_models import MultiBarChart, Axis
+from corehq.apps.reports.graph_models import MultiBarChart, LineChart, Axis
 from corehq.apps.reports.sqlreport import SqlTabularReport, DatabaseColumn, SummingSqlTabularReport, AggregateColumn
 from corehq.apps.reports.standard import CustomProjectReport, DatespanMixin
 from util import get_unique_combinations
@@ -175,6 +175,7 @@ class GSIDSQLPatientReport(GSIDSQLReport):
     @property
     def charts(self):
         rows = super(GSIDSQLPatientReport, self).rows
+        print rows
         loc_axis = Axis(label="Location")
         tests_axis = Axis(label="Number of Tests")
         chart = MultiBarChart("A sample graph", loc_axis, tests_axis)
@@ -263,7 +264,27 @@ class GSIDSQLByDayReport(GSIDSQLReport):
             rows.append(row)
         return rows
 
-    
+    @property
+    def charts(self):
+        rows = self.rows
+        print rows
+        date_index = len(self.place_types)
+        startdate = self.startdate_obj
+        enddate = self.enddate_obj
+        loc_axis = Axis(label="Date")
+        tests_axis = Axis(label="Number of Tests")
+        chart = LineChart("A sample graph", loc_axis, tests_axis)
+        chart.stacked = True
+        for row in rows:
+            data_points = []
+            for n, day in enumerate(self.daterange(startdate, enddate)):
+                x = day
+                y = 0 if row[date_index + n] == "--" else row[date_index + n]
+                print x, y
+                data_points.append({'x':x , 'y':y})
+            chart.add_dataset(row[date_index-1], data_points, color="#1f07b4")
+        return [chart]
+
 class GSIDSQLTestLotsReport(GSIDSQLReport):
     name = "Test Lots Report"
     slug = "test_lots_sql"
