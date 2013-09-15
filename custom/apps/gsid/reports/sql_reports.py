@@ -175,7 +175,6 @@ class GSIDSQLPatientReport(GSIDSQLReport):
     @property
     def charts(self):
         rows = super(GSIDSQLPatientReport, self).rows
-        print rows
         loc_axis = Axis(label="Location")
         tests_axis = Axis(label="Number of Tests")
         chart = MultiBarChart("A sample graph", loc_axis, tests_axis)
@@ -267,20 +266,17 @@ class GSIDSQLByDayReport(GSIDSQLReport):
     @property
     def charts(self):
         rows = self.rows
-        print rows
         date_index = len(self.place_types)
         startdate = self.startdate_obj
         enddate = self.enddate_obj
-        loc_axis = Axis(label="Date")
+        date_axis = Axis(label="Date", dateFormat="%b %d")
         tests_axis = Axis(label="Number of Tests")
-        chart = LineChart("A sample graph", loc_axis, tests_axis)
-        chart.stacked = True
+        chart = LineChart("A sample graph", date_axis, tests_axis)
         for row in rows:
             data_points = []
             for n, day in enumerate(self.daterange(startdate, enddate)):
                 x = day
                 y = 0 if row[date_index + n] == "--" else row[date_index + n]
-                print x, y
                 data_points.append({'x':x , 'y':y})
             chart.add_dataset(row[date_index-1], data_points, color="#1f07b4")
         return [chart]
