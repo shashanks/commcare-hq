@@ -13,6 +13,8 @@ from dimagi.utils.decorators.memoized import memoized
 
 from datetime import datetime, timedelta
 
+import hashlib
+
 class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin):
     fields = ['custom.apps.gsid.reports.TestField', 
               'custom.apps.gsid.reports.RelativeDatespanField', 
@@ -278,7 +280,9 @@ class GSIDSQLByDayReport(GSIDSQLReport):
                 x = day
                 y = 0 if row[date_index + n] == "--" else row[date_index + n]
                 data_points.append({'x':x , 'y':y})
-            chart.add_dataset(row[date_index-1], data_points, color="#1f07b4")
+            color = int(hashlib.md5(row[date_index-1]).hexdigest(), 16)
+            color = str(hex(color))
+            chart.add_dataset(row[date_index-1], data_points, color="#"+color[2:8])
         return [chart]
 
 class GSIDSQLTestLotsReport(GSIDSQLReport):
