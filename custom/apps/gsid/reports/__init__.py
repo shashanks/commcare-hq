@@ -4,7 +4,7 @@ from corehq.apps.reports.datatables import DataTablesHeader, DataTablesColumn, D
 from corehq.apps.reports.fields import AsyncDrillableField, ReportSelectField
 from corehq.apps.reports.filters.base import BaseSingleOptionFilter, BaseDrilldownOptionFilter
 from corehq.apps.reports.filters.dates import DatespanFilter
-from corehq.apps.reports.filters.fixtures import AsyncDrillableFilter
+from corehq.apps.reports.filters.fixtures import MultiLocationFilter
 from corehq.apps.reports.standard import CustomProjectReport, DatespanMixin
 from util import get_unique_combinations
 from couchdbkit_aggregate.fn import mean, min, max
@@ -16,7 +16,7 @@ class AsyncTestField(AsyncDrillableField):
     hierarchy = [{"type": "diseases", "display": "disease_name"},
                  {"type": "tests", "parent_ref": "disease_id", "references": "test_name", "display": "visible_test_name"}]
 
-class AsyncClinicField(AsyncDrillableFilter):
+class AsyncClinicField(MultiLocationFilter):
     label = "Country/Province/District/Clinic"
     slug = "clinic"
     hierarchy = [{"type": "country", "display": "country_name"},
