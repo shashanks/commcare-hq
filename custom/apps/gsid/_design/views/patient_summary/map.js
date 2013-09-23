@@ -1,24 +1,23 @@
 function (doc) {
-    if (doc.doc_type === 'XFormInstance' && (doc.domain === 'gsid')) {
-        var form = doc.form;
-
-        if (form["@name"] !== 'Malaria Test' && form["@name"] !== 'HIV Test') {
-            return;
-        }
+    if (doc.doc_type === 'CommCareCase' && (doc.domain === 'gsid')) {
 
         emit(
             [doc.domain,
-            form.disease,
-            form.test_version,
-            form.country,
-            form.province,
-            form.district,
-            form.clinic,
-            form.sex,
-            doc.received_on,
-            form.diagnosis,
-            parseInt(form.lot_number, 10)],
-            parseInt(form.age, 10)
+            doc.disease,
+            doc.test_version,
+            doc.country,
+            doc.province,
+            doc.district,
+            doc.clinic,
+            doc.sex,
+            doc.opened_on,
+            doc.diagnosis,
+            parseInt(doc.lot_number, 10),
+            doc.gps,
+            doc.gps_country,
+            doc.gps_province,
+            doc.gps_district],
+            parseInt(doc.age, 10)
         );
     }
 }
