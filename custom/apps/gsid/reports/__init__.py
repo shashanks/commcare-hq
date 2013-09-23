@@ -66,7 +66,7 @@ class TestField(BaseDrilldownOptionFilter):
 
 class AggregateAtField(ReportSelectField):
     slug = "aggregate_at"
-    name = "Aggregate at what level"
+    name = "Group By"
     cssId = "aggregate_at_select"
     cssClasses = "span2"
     field_opts = ["Country", "Province", "District", "Clinic"]
