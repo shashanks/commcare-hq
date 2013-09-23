@@ -23,6 +23,10 @@ class PatientSummaryMapping(CtableMappingFixture):
             ColumnDef(name="diagnosis", data_type="string", value_source="key", value_index=9),
             ColumnDef(name="age", data_type="integer", value_source="value", value_attribute="sum"),       
             ColumnDef(name="lot_number", data_type="integer", value_source="key", value_index=10),
+            ColumnDef(name="gps", data_type="string", value_source="key", value_index=11),
+            ColumnDef(name="gps_country", data_type="string", value_source="key", value_index=12),
+            ColumnDef(name="gps_province", data_type="string", value_source="key", value_index=13),
+            ColumnDef(name="gps_district", data_type="string", value_source="key", value_index=14),
         ]
 
         return columns      
