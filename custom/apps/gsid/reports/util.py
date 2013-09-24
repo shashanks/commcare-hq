@@ -37,6 +37,7 @@ def get_unique_combinations(domain, place_types=None, place=None):
         for pt in place_types:
             if base_type == pt:
                 comb[pt] = str(fdi.fields[pt+'_id'])
+                comb["gps"] = str(fdi.fields["gps"])
             else:
                 p_id = fdi.fields.get(pt+"_id", None)
                 if p_id:

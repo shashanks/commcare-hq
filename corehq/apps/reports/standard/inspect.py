@@ -768,6 +768,7 @@ class GenericMapReport(ProjectReport, ProjectReportParametersMixin):
         def points():
             for row in data:
                 geo = row[geo_col]
+                print geo,"xxxxxxxxxxxxxxxxxxxxxxxx"
                 if geo is None:
                     continue
 
@@ -795,7 +796,7 @@ class GenericMapReport(ProjectReport, ProjectReportParametersMixin):
                     },
                     'properties': dict((k, v) for k, v in row.iteritems() if k != geo_col),
                 }
-
+        print  list(points())
         return {
             'type': 'FeatureCollection',
             'features': list(points()),
@@ -809,7 +810,7 @@ class GenericMapReport(ProjectReport, ProjectReportParametersMixin):
         config['domain'] = self.domain
 
         DataSource = to_function(params['report'])
-        return DataSource(config).get_data()
+        return DataSource(request=self.request, slugs=None, domain=self.domain).get_data()
 
     def _get_data_csv(self, params, filters):
         import csv
