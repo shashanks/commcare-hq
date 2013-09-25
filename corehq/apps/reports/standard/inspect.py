@@ -752,7 +752,7 @@ class GenericMapReport(ProjectReport, ProjectReportParametersMixin):
         except AttributeError:
             raise RuntimeError('unknown adapter [%s]' % adapter)
         data = loader(self.data_source, dict(self.request.GET.iteritems()))
-
+        print data
         # debug
         #import pprint
         #data = list(data)
@@ -794,7 +794,7 @@ class GenericMapReport(ProjectReport, ProjectReportParametersMixin):
                         'type': feature_type,
                         'coordinates': geo,
                     },
-                    'properties': dict((k, v) for k, v in row.iteritems() if k != geo_col),
+                    'properties': dict((k, v['html'] if isinstance(v, dict) else v) for k, v in row.iteritems() if k != geo_col),
                 }
         print  list(points())
         return {
@@ -810,7 +810,7 @@ class GenericMapReport(ProjectReport, ProjectReportParametersMixin):
         config['domain'] = self.domain
 
         DataSource = to_function(params['report'])
-        return DataSource(request=self.request, slugs=None, domain=self.domain).get_data()
+        return DataSource(request=self.request, slugs=None, domain=self.domain, map=True).get_data()
 
     def _get_data_csv(self, params, filters):
         import csv

@@ -428,9 +428,14 @@ class GSIDSQLByAgeReport(GSIDSQLReport):
         return self.common_columns + generate_columns("male") + generate_columns("female")
 
 
-class PatientMapReport(GenericMapReport):
+class PatientMapReport(GenericMapReport, CustomProjectReport):
     name = "Reporting Status (map)"
     slug = "reportingstatus_map"
+
+    fields = ['custom.apps.gsid.reports.TestField', 
+              'custom.apps.gsid.reports.RelativeDatespanField', 
+              'custom.apps.gsid.reports.AsyncClinicField',
+              'custom.apps.gsid.reports.AggregateAtField']
 
     data_source = {
         'adapter': 'report',
@@ -439,4 +444,5 @@ class PatientMapReport(GenericMapReport):
     }
 
     display_config = {}
+
 
