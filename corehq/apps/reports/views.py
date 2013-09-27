@@ -244,7 +244,8 @@ def _export_default_or_custom_data(request, domain, export_id=None, bulk_export=
     elif export_id:
         # this is a custom export
         try:
-            export_object = CustomExportHelper.make(request, 'form', domain, export_id).custom_export
+            export_type = request.GET.get('type', 'form')
+            export_object = CustomExportHelper.make(request, export_type, domain, export_id).custom_export
             if safe_only and not export_object.is_safe:
                 return HttpResponseForbidden()
         except ResourceNotFound:
@@ -311,15 +312,24 @@ def export_all_form_metadata(req, domain):
 @login_or_digest
 @require_form_export_permission
 @require_GET
+@datespan_in_request(from_param="startdate", to_param="enddate")
 def export_all_form_metadata_async(req, domain):
+    datespan = req.datespan if req.GET.get("startdate") and req.GET.get("enddate") else None
+    group_id = req.GET.get("group")
+    ufilter =  FilterUsersField.get_user_filter(req)[0]
+    users = list(util.get_all_users_by_domain(domain=domain, group=group_id, user_filter=ufilter, simplified=True))
+    user_ids = filter(None, [u["user_id"] for u in users])
     format = req.GET.get("format", Format.XLS_2007)
     filename = "%s_forms" % domain
+
     download = DownloadBase()
     download.set_task(create_metadata_export.delay(
         download.download_id,
         domain,
         format=format,
         filename=filename,
+        datespan=datespan,
+        user_ids=user_ids,
     ))
     return download.get_start_response()
 

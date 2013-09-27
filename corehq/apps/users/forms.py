@@ -1,12 +1,15 @@
+from crispy_forms.helper import FormHelper
+from crispy_forms.layout import Submit
 from django import forms
 from django.core.validators import EmailValidator, email_re
 from django.core.urlresolvers import reverse
 from django.forms.widgets import PasswordInput, HiddenInput
-from django.utils.encoding import smart_str
 from django.utils.safestring import mark_safe
 from django.utils.translation import ugettext as _, ugettext_noop
 from django.template.loader import get_template
-from django.template import Template, Context
+from django.template import Context
+from corehq.apps.commtrack.helpers import set_commtrack_location
+from corehq.apps.locations.models import Location
 from corehq.apps.users.models import CouchUser
 from corehq.apps.users.util import format_username
 from corehq.apps.app_manager.models import validate_lang
@@ -190,13 +193,32 @@ class CommCareAccountForm(forms.Form):
 
 validate_username = EmailValidator(email_re, _(u'Username contains invalid characters.'), 'invalid')
 
+
+class MultipleSelectionForm(forms.Form):
+    """
+    Form for selecting groups (used by the group UI on the user page)
+    """
+    selected_ids = forms.MultipleChoiceField(
+        label="",
+        required=False,
+    )
+
+    def __init__(self, *args, **kwargs):
+        self.helper = FormHelper()
+        self.helper.form_tag = False
+        self.helper.add_input(Submit('submit', 'Update'))
+        super(MultipleSelectionForm, self).__init__(*args, **kwargs)
+
+
 class SupplyPointSelectWidget(forms.Widget):
-    def __init__(self, attrs=None, domain=None):
+    def __init__(self, attrs=None, domain=None, id='supply-point'):
         super(SupplyPointSelectWidget, self).__init__(attrs)
         self.domain = domain
+        self.id = id
 
     def render(self, name, value, attrs=None):
         return get_template('locations/manage/partials/autocomplete_select_widget.html').render(Context({
+                    'id': self.id,
                     'name': name,
                     'value': value or '',
                     'query_url': reverse('corehq.apps.commtrack.views.api_query_supply_point', args=[self.domain]),
@@ -214,5 +236,7 @@ class CommtrackUserForm(forms.Form):
         self.fields['supply_point'].widget = SupplyPointSelectWidget(domain=domain)
 
     def save(self, user):
-        user.commtrack_location = self.cleaned_data['supply_point']
-        user.save()
+        location_id = self.cleaned_data['supply_point']
+        if location_id:
+            loc = Location.get(location_id)
+            set_commtrack_location(user, loc)

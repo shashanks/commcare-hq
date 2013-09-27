@@ -31,13 +31,15 @@ from corehq.apps.hqadmin.models import HqDeploy
 from corehq.apps.hqadmin.forms import EmailForm, BrokenBuildsForm
 from corehq.apps.builds.models import CommCareBuildConfig, BuildSpec
 from corehq.apps.domain.models import Domain
-from corehq.apps.hqadmin.escheck import check_cluster_health, check_case_index, check_xform_index
+from corehq.apps.hqadmin.escheck import check_cluster_health, check_case_index_by_view, check_xform_index_by_view
 from corehq.apps.ota.views import get_restore_response, get_restore_params
 from corehq.apps.reports.datatables import DataTablesColumn, DataTablesHeader, DTSortType
+from corehq.apps.reports.standard.domains import es_domain_query
 from corehq.apps.reports.util import make_form_couch_key
 from corehq.apps.sms.models import SMSLog
 from corehq.apps.users.models import  CommCareUser, WebUser
 from corehq.apps.users.util import format_username
+from corehq.elastic import get_stats_data, parse_args_for_es, es_query, ES_URLS, ES_MAX_CLAUSE_COUNT
 from couchforms.models import XFormInstance
 from dimagi.utils.couch.database import get_db, is_bigcouch
 from corehq.apps.domain.decorators import  require_superuser
@@ -53,6 +55,7 @@ from dimagi.utils.timezones import utils as tz_utils
 from dimagi.utils.django.email import send_HTML_email
 from django.template.loader import render_to_string
 from django.http import Http404
+from pillowtop import get_all_pillows_json
 
 
 @require_superuser
@@ -589,7 +592,6 @@ def system_ajax(request):
     task_limit = getattr(settings, 'CELERYMON_TASK_LIMIT', 12)
     celery_monitoring = getattr(settings, 'CELERY_FLOWER_URL', None)
     db = XFormInstance.get_db()
-    ret = {}
     if type == "_active_tasks":
         tasks = [] if is_bigcouch() else filter(lambda x: x['type'] == "indexer", db.server.active_tasks())
         #for reference structure is:
@@ -601,11 +603,13 @@ def system_ajax(request):
         #            'design_document': 'mockymock', 'progress': 70,
         #            'started_on': 1349906040.723517, 'updated_on': 1349905800.679458,
         #            'total_changes': 1023}]
-        return HttpResponse(json.dumps(tasks), mimetype='application/json')
+        return json_response(tasks)
     elif type == "_stats":
-        return HttpResponse(json.dumps({}), mimetype = 'application/json')
+        return json_response({})
     elif type == "_logs":
         pass
+    elif type == 'pillowtop':
+        return json_response(get_all_pillows_json())
 
     if celery_monitoring:
         cresource = Resource(celery_monitoring, timeout=3)
@@ -756,8 +760,8 @@ def system_info(request):
     #elasticsearch status
     #node status
     context.update(check_cluster_health())
-    context.update(check_case_index())
-    context.update(check_xform_index())
+    context.update(check_case_index_by_view())
+    context.update(check_xform_index_by_view())
 
     return render(request, "hqadmin/system_info.html", context)
 
@@ -838,7 +842,7 @@ def admin_restore(request):
     user = CommCareUser.get_by_username(full_username)
     if not user:
         return HttpResponseNotFound('User %s not found.' % full_username)
-    return get_restore_response(user, **get_restore_params(request))
+    return get_restore_response(user.domain, user, **get_restore_params(request))
 
 @require_superuser
 def management_commands(request, template="hqadmin/management_commands.html"):
@@ -882,3 +886,70 @@ class FlagBrokenBuilds(FormView):
                 docs.append(doc)
         db.bulk_save(docs)
         return HttpResponse("posted!")
+
+
+def get_domain_stats_data(params, datespan, interval='week', datefield="date_created"):
+    q = {
+        "query": {"bool": {"must":
+                                  [{"match": {'doc_type': "Domain"}},
+                                   {"term": {"is_snapshot": False}}]}},
+        "facets": {
+            "histo": {
+                "date_histogram": {
+                    "field": datefield,
+                    "interval": interval
+                },
+                "facet_filter": {
+                    "and": [{
+                        "range": {
+                            datefield: {
+                                "from": datespan.startdate_display,
+                                "to": datespan.enddate_display,
+                            }}}]}}}}
+
+    histo_data = es_query(params, q=q, size=0, es_url=ES_URLS["domains"])
+
+    del q["facets"]
+    q["filter"] = {
+        "and": [
+            {"range": {datefield: {"lt": datespan.startdate_display}}},
+        ],
+    }
+
+    domains_before_date = es_query(params, q=q, size=0, es_url=ES_URLS["domains"])
+
+    return {
+        'histo_data': {"All Domains": histo_data["facets"]["histo"]["entries"]},
+        'initial_values': {"All Domains": domains_before_date["hits"]["total"]},
+        'startdate': datespan.startdate_key_utc,
+        'enddate': datespan.enddate_key_utc,
+    }
+
+
+@require_superuser
+@datespan_in_request(from_param="startdate", to_param="enddate", default_days=365)
+def stats_data(request):
+    histo_type = request.GET.get('histogram_type')
+    interval = request.GET.get("interval", "week")
+    datefield = request.GET.get("datefield")
+
+    params, __ = parse_args_for_es(request, prefix='es_')
+
+    if histo_type == "domains":
+        return json_response(get_domain_stats_data(params, request.datespan, interval=interval, datefield=datefield))
+
+    if params:
+        domain_results = es_domain_query(params, fields=["name"], size=99999, show_stats=False)
+        domains = [d["fields"]["name"] for d in domain_results["hits"]["hits"]]
+
+        if len(domains) <= 10:
+            domain_info = [{"names": [d], "display_name": d} for d in domains]
+        elif len(domains) < ES_MAX_CLAUSE_COUNT:
+            domain_info = [{"names": [d for d in domains], "display_name": _("Domains Matching Filter")}]
+        else:
+            domain_info = [{"names": None, "display_name": _("All Domains (NOT applying filters. > 500 projects)")}]
+    else:
+        domain_info = [{"names": None, "display_name": _("All Domains")}]
+
+    stats_data = get_stats_data(domain_info, histo_type, request.datespan, interval=interval)
+    return json_response(stats_data)

@@ -18,10 +18,12 @@ class ProvinceField(AsyncDrillableField):
 class ShowAgeField(BooleanField):
     label = "Show Age"
     slug = "show_age_field"
+    template = "care_sa/reports/partials/checkbox.html"
 
 class ShowGenderField(BooleanField):
     label = "Show Gender"
     slug = "show_gender_field"
+    template = "care_sa/reports/partials/checkbox.html"
 
 class CBOField(GroupField):
     name = 'CBO'
@@ -238,7 +240,7 @@ class CareReport(SqlTabularReport,
 
     def age_seperated_dict(self, default):
         """ Build a dictionary with a copy of default for each age group """
-        return dict((str(i), copy(default)) for i in range(3))
+        return dict((str(i), copy(default)) for i in range(4))
 
     def initialize_user_stuff(self):
         """
@@ -350,6 +352,8 @@ class CareReport(SqlTabularReport,
             return '15-24 years'
         elif age_group_val == '2':
             return '25+ years'
+        else:
+            return 'Unknown'
 
     def get_grouping_name(self, user):
         """
@@ -378,7 +382,14 @@ class CareReport(SqlTabularReport,
         # configured report structure
         rows = self.build_data(stock_rows)
 
+        # set up with for total rows
+        if (not self.show_age() and self.show_gender()):
+            total_width = 1
+        else:
+            total_width = 2
+
         rows_for_table = []
+        overall_total_row = []
         # for every group of data, unpack back to individual rows
         # and set up the information the template needs to render this
         # stuff
@@ -421,18 +432,32 @@ class CareReport(SqlTabularReport,
 
                     total_row = self.add_row_to_total(total_row, row_data)
             else:
+                row_data = rows[user]
                 rows_for_table.append({
                     'username': u,
                     'gender':  'no_grouping',  # magic
-                    'row_data': rows[user]
+                    'row_data': row_data
                 })
+
+            if total_row:
+                overall_total_row = self.add_row_to_total(overall_total_row, total_row)
+            else:
+                # there is no total_row if we aren't grouping by age
+                overall_total_row = self.add_row_to_total(overall_total_row, row_data)
 
             rows_for_table.append({
                 'username': 'TOTAL_ROW',
-                'total_width': 1 + int(self.show_age()),
+                'total_width': total_width,
                 'gender': self.show_gender(),
                 'row_data': total_row,
             })
+
+        rows_for_table.append({
+            'username': 'OVERALL_TOTAL_ROW',
+            'total_width': total_width,
+            'gender': self.show_gender(),
+            'row_data': overall_total_row,
+        })
 
         return rows_for_table
 
@@ -453,7 +478,7 @@ class TestingAndCounseling(CareReport):
         ['Individuals HIV infected provided with CD4 count test results',
          'new_hiv_cd4_results'],  # 1i
         ['Individuals HIV infected provided with CD4 count test results from previous months',
-         'new_hiv_in_care_program'],  # 1k TODO empty?
+         'new_hiv_in_care_program'],  # 1k
         ['People tested as individuals', 'individual_tests'],  # 1l
         ['People tested as couples', 'couple_tests', 'SumColumn'],  # 1m
         ['People tested at the community', 'hiv_community'],
@@ -487,13 +512,15 @@ class IACT(CareReport):
         ['HIV+ client completed I-ACT', 'hiv_pos_completed'],  # 3b
         ['HIV+ clients registered for I-ACT & in the pipeline (5th session)', 'hiv_pos_pipeline'],  # 3c
         #['HIV+client registered for I-ACT after diagnosis', #TODO],  # 3d
-        ['I-ACT participants receiving INH/IPT prophylaxis', 'iact_participant_ipt'],  # 3f TODO empty?
-        ['I-ACT participants receiving Cotrimoxizole prophylaxis/Dapsone', 'iact_participant_ipt'],  # 3g TODO empty?
-        ['I-ACT participant on Pre-ART', 'iact_participant_art'],  # 3h TODO empty?
-        ['I-ACT participant on ARV', 'iact_participant_arv'],  # 3i TODO empty?
-        #['I-ACT registered client with CD4 count <200', ''],  # 3j
-        #['I-ACT registered client with CD4 count 200 - 350', ''],  # 3k
-        #['I-ACT registered client with CD4 cont higher than 350', ''],  # 3l
-        #['Unknown CD4 count at registration', ''],  # 3m
-        ['I-ACT Support groups completed (all 6 sessions)', 'iact_support_groups'],  # 3n TODO empty?
+        ['I-ACT participants receiving INH/IPT prophylaxis',
+         'iact_participant_ipt'],  # 3f
+        ['I-ACT participants receiving Cotrimoxizole prophylaxis/Dapsone',
+         'iact_participant_bactrim'],  # 3g
+        ['I-ACT participant on Pre-ART', 'iact_participant_art'],  # 3h
+        ['I-ACT participant on ARV', 'iact_participant_arv'],  # 3i
+        ['I-ACT registered client with CD4 count <200', 'cd4lt200'],  # 3j
+        ['I-ACT registered client with CD4 count 200 - 350', 'cd4lt350'],  # 3k
+        ['I-ACT registered client with CD4 cont higher than 350', 'cd4gt350'],  # 3l
+        ['Unknown CD4 count at registration', 'unknown_cd4'],  # 3m
+        ['I-ACT Support groups completed (all 6 sessions)', 'iact_support_groups'],  # 3n
     ]

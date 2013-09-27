@@ -1,8 +1,13 @@
+import uuid
+from xml.etree import ElementTree
 from couchdbkit.exceptions import ResourceNotFound
 from couchdbkit.ext.django.schema import *
 from django.utils.translation import ugettext as _
+from casexml.apps.case.mock import CaseBlock
+from casexml.apps.case.xml import V2
 
 from corehq.apps.commtrack import const
+from corehq.apps.hqcase.utils import submit_case_blocks
 from corehq.apps.users.models import CommCareUser
 from dimagi.utils.couch.loosechange import map_reduce
 from couchforms.models import XFormInstance
@@ -11,7 +16,7 @@ from datetime import datetime
 from casexml.apps.case.models import CommCareCase
 from copy import copy
 from django.dispatch import receiver
-from corehq.apps.locations.signals import location_created
+from corehq.apps.locations.signals import location_created, location_edited
 from corehq.apps.locations.models import Location
 from corehq.apps.commtrack.const import RequisitionActions, RequisitionStatus
 
@@ -162,6 +167,19 @@ class StockLevelsConfig(DocumentSchema):
     overstock_threshold = DecimalProperty(default=3)  # in months
 
 
+class OpenLMISConfig(DocumentSchema):
+    # placeholder class for when this becomes fancier
+    enabled = BooleanProperty(default=False)
+
+    url = StringProperty()
+    username = StringProperty()
+    # we store passwords in cleartext right now, but in the future may want
+    # to leverage something like oauth to manage this better
+    password = StringProperty()
+
+    using_requisitions = BooleanProperty(default=False) # whether openlmis handles our requisitions for us
+
+
 class CommtrackConfig(Document):
 
     domain = StringProperty()
@@ -179,6 +197,7 @@ class CommtrackConfig(Document):
     supply_point_types = SchemaListProperty(SupplyPointType)
 
     requisition_config = SchemaProperty(CommtrackRequisitionConfig)
+    openlmis_config = SchemaProperty(OpenLMISConfig)
 
     # configured on Advanced Settings page
     use_auto_emergency_levels = BooleanProperty(default=False)
@@ -245,6 +264,10 @@ class CommtrackConfig(Document):
     def requisitions_enabled(self):
         return self.requisition_config.enabled
 
+    @property
+    def openlmis_enabled(self):
+        return self.openlmis_config.enabled
+
 def _view_shared(view_name, domain, location_id=None, skip=0, limit=100):
     extras = {"limit": limit} if limit else {}
     startkey = [domain, location_id] if location_id else [domain]
@@ -253,7 +276,51 @@ def _view_shared(view_name, domain, location_id=None, skip=0, limit=100):
         view_name, startkey=startkey, endkey=endkey,
         reduce=False, skip=skip, **extras)
 
-class StockStatus(DocumentSchema):
+
+def force_int(value):
+    if value is None:
+        return None
+    else:
+        return int(value)
+
+
+def force_bool(value):
+    if value is None:
+        return None
+    elif value is 'false':
+        return False
+    else:
+        return bool(value)
+
+
+def force_empty_string_to_null(value):
+    if value == '':
+        return None
+    else:
+        return value
+
+
+class StringDataSchema(DocumentSchema):
+
+    @classmethod
+    def force_wrap(cls, data):
+        data = copy(data)
+        for property in cls.properties().values():
+            transform = {
+                IntegerProperty: force_int,
+                BooleanProperty: force_bool,
+                DateProperty: force_empty_string_to_null,
+                DateTimeProperty: force_empty_string_to_null,
+            }.get(property.__class__, lambda x: x)
+            data[property.name] = transform(data.get(property.name))
+        return super(StringDataSchema, cls).wrap(data)
+
+    @classmethod
+    def wrap(cls, data):
+        raise NotImplementedError()
+
+
+class StockStatus(StringDataSchema):
     """
     This is a wrapper/helper class to represent the current stock status
     of a commtrack case.
@@ -271,28 +338,21 @@ class StockStatus(DocumentSchema):
 
     @classmethod
     def from_case(cls, case):
-        return StockStatus.wrap(case._doc)
-
-    @classmethod
-    def wrap(cls, data):
-        # couchdbkit doesn't like passing empty strings (instead of nulls)
-        # to DateTimeProperty fields
-        if data.get('stocked_out_since', None) == '':
-            del data['stocked_out_since']
-        return super(StockStatus, cls).wrap(data) 
+        return StockStatus.force_wrap(case._doc)
 
     @classmethod
     def by_domain(cls, domain, skip=0, limit=100):
-        return [StockStatus.wrap(row["value"]) for row in _view_shared(
+        return [StockStatus.force_wrap(row["value"]) for row in _view_shared(
             'commtrack/current_stock_status', domain, skip=skip, limit=limit)]
 
     @classmethod
     def by_location(cls, domain, location_id, skip=0, limit=100):
-        return [StockStatus.wrap(row["value"]) for row in _view_shared(
+        return [StockStatus.force_wrap(row["value"]) for row in _view_shared(
             'commtrack/current_stock_status', domain, location_id,
             skip=skip, limit=limit)]
 
-class StockTransaction(DocumentSchema):
+
+class StockTransaction(StringDataSchema):
     """
     wrapper/helper for transactions
     """
@@ -308,12 +368,12 @@ class StockTransaction(DocumentSchema):
 
     @classmethod
     def by_domain(cls, domain, skip=0, limit=100):
-        return [StockTransaction.wrap(row["value"]) for row in _view_shared(
+        return [StockTransaction.force_wrap(row["value"]) for row in _view_shared(
             'commtrack/stock_transactions', domain, skip=skip, limit=limit)]
 
     @classmethod
     def by_location(cls, domain, location_id, skip=0, limit=100):
-        return [StockTransaction.wrap(row["value"]) for row in _view_shared(
+        return [StockTransaction.force_wrap(row["value"]) for row in _view_shared(
             'commtrack/stock_transactions', domain, location_id,
             skip=skip, limit=limit)]
 
@@ -322,8 +382,7 @@ class StockTransaction(DocumentSchema):
         q = CommCareCase.get_db().view('commtrack/stock_transactions_by_product',
                                        startkey=[product_case, start_date],
                                        endkey=[product_case, end_date, {}])
-        return [StockTransaction.wrap(row['value']) for row in q]
-
+        return [StockTransaction.force_wrap(row['value']) for row in q]
 
 
 def _get_single_index(case, identifier, type, wrapper=None):
@@ -335,6 +394,7 @@ def _get_single_index(case, identifier, type, wrapper=None):
         ref_id = matching[0].referenced_id
         return wrapper.get(ref_id) if wrapper else ref_id
     return None
+
 
 def get_case_wrapper(data):
     return {
@@ -369,6 +429,49 @@ class SupplyPointCase(CommCareCase):
                 pass
         return None
 
+    @classmethod
+    def _from_caseblock(cls, domain, caseblock):
+        username = const.COMMTRACK_USERNAME
+        casexml = ElementTree.tostring(caseblock.as_xml())
+        submit_case_blocks(casexml, domain, username, const.get_commtrack_user_id(domain),
+                           xmlns=const.COMMTRACK_SUPPLY_POINT_XMLNS)
+        return cls.get(caseblock._id)
+
+    @classmethod
+    def create_from_location(cls, domain, location, owner_id=None):
+        # a supply point is currently just a case with a special type
+        id = uuid.uuid4().hex
+        user_id = const.get_commtrack_user_id(domain)
+        owner_id = owner_id or user_id
+        caseblock = CaseBlock(
+            case_id=id,
+            create=True,
+            version=V2,
+            case_name=location.name,
+            user_id=user_id,
+            owner_id=owner_id,
+            case_type=const.SUPPLY_POINT_CASE_TYPE,
+            update={
+                'location_id': location._id,
+            }
+        )
+        return cls._from_caseblock(domain, caseblock)
+
+    def update_from_location(self, location):
+        assert self.domain == location.domain
+        caseblock = CaseBlock(
+            case_id=self._id,
+            create=False,
+            version=V2,
+            case_name=location.name,
+            user_id=const.get_commtrack_user_id(location.domain),
+            update={
+                'location_id': location._id,
+            }
+        )
+        return SupplyPointCase._from_caseblock(location.domain, caseblock)
+
+
     def to_full_dict(self):
         data = super(SupplyPointCase, self).to_full_dict()
         data.update({
@@ -386,6 +489,14 @@ class SupplyPointCase(CommCareCase):
         #data['last_reported'] = None
 
         return data
+
+    @classmethod
+    def get_by_location(cls, location):
+        return cls.view('commtrack/supply_point_by_loc',
+            key=[location.domain, location._id],
+            include_docs=True,
+            classes={'CommCareCase': SupplyPointCase},
+        ).one()
 
     @classmethod
     def get_display_config(cls):
@@ -869,7 +980,7 @@ class StockReport(object):
 
     @property
     def transactions(self):
-        return [StockTransaction.wrap(t) for t in \
+        return [StockTransaction.force_wrap(t) for t in \
                 self._form.form.get('transaction', [])]
 
     @property
@@ -895,20 +1006,34 @@ class StockReport(object):
                                    endkey=endkey,
                                    include_docs=True)]
 
-@receiver(location_created)
-def post_loc_created(sender, loc=None, **kwargs):
-    # circular imports
-    from corehq.apps.commtrack.helpers import make_supply_point
+def sync_location_supply_point(loc):
+    # circular import
     from corehq.apps.domain.models import Domain
 
     domain = Domain.get_by_name(loc.domain)
     if not domain.commtrack_enabled:
         return
-    config = domain.commtrack_settings
 
-    # exclude administrative-only locs
-    if loc.location_type in [loc_type.name for loc_type in config.location_types if not loc_type.administrative]:
-        make_supply_point(loc.domain, loc)
+    def _needs_supply_point(loc, config):
+        """Exclude administrative-only locs"""
+        return loc.location_type in [loc_type.name for loc_type in config.location_types if not loc_type.administrative]
+
+    config = domain.commtrack_settings
+    if _needs_supply_point(loc, config):
+        supply_point = SupplyPointCase.get_by_location(loc)
+        if supply_point:
+            supply_point.update_from_location(loc)
+            return supply_point
+        else:
+            return SupplyPointCase.create_from_location(loc.domain, loc)
+
+@receiver(location_edited)
+def post_loc_edited(sender, loc=None, **kwargs):
+    sync_location_supply_point(loc)
+
+@receiver(location_created)
+def post_loc_created(sender, loc=None, **kwargs):
+    sync_location_supply_point(loc)
 
 # import signals
 from . import signals

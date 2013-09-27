@@ -1,6 +1,6 @@
 import itertools
+from casexml.apps.case.mock import CaseBlock
 from casexml.apps.case.models import CommCareCase
-from casexml.apps.case.tests.util import CaseBlock
 from casexml.apps.case.xml import V2
 from lxml import etree
 from lxml.builder import ElementMaker
@@ -347,8 +347,8 @@ class StockState(object):
         self.case = case
         self.last_reported = reported_on
         props = case.dynamic_properties()
-        self.current_stock = int(props.get('current_stock', 0)) # int
-        self.stocked_out_since = props.get('stocked_out_since') # date
+        self.current_stock = int(props.get('current_stock') or 0)  # int
+        self.stocked_out_since = props.get('stocked_out_since')  # date
 
     def update(self, action_type, value):
         """given the current stock state for a product at a location, update

@@ -144,8 +144,9 @@ class Permissions(DocumentSchema):
 
     def __or__(self, other):
         permissions = Permissions()
-        for name in permissions.properties():
-            permissions._setattr(name, self._getattr(name) | other._getattr(name))
+        for name, value in permissions.properties().items():
+            if isinstance(value, (BooleanProperty, ListProperty)):
+                permissions._setattr(name, self._getattr(name) | other._getattr(name))
         return permissions
 
     def __eq__(self, other):
@@ -260,9 +261,6 @@ class DomainMembership(Membership):
     """
 
     domain = StringProperty()
-    # i don't think the following two lines are ever actually used
-#    last_login = DateTimeProperty()
-#    date_joined = DateTimeProperty()
     timezone = StringProperty(default=getattr(settings, "TIME_ZONE", "UTC"))
     override_global_tz = BooleanProperty(default=False)
     role_id = StringProperty()
@@ -442,7 +440,7 @@ class _AuthorizableMixin(IsMemberOfMixin):
                 domain = self.current_domain
             else:
                 return False # no domain, no admin
-        if self.is_global_admin():
+        if self.is_global_admin() and (domain is None or not Domain.get_by_name(domain).restrict_superusers):
             return True
         dm = self.get_domain_membership(domain)
         if dm:
@@ -855,6 +853,21 @@ class CouchUser(Document, DjangoUserMixin, IsMemberOfMixin, UnicodeMixIn, EulaMi
             **extra_args
         ).all()
 
+
+    @classmethod
+    def ids_by_domain(cls, domain, is_active=True):
+        flag = "active" if is_active else "inactive"
+        if cls.__name__ == "CouchUser":
+            key = [flag, domain]
+        else:
+            key = [flag, domain, cls.__name__]
+        return [r['id'] for r in cls.get_db().view("users/by_domain",
+            startkey=key,
+            endkey=key + [{}],
+            reduce=False,
+            include_docs=False,
+        )]
+
     @classmethod
     def total_by_domain(cls, domain, is_active=True):
         data = cls.by_domain(domain, is_active, reduce=True)
@@ -932,6 +945,15 @@ class CouchUser(Document, DjangoUserMixin, IsMemberOfMixin, UnicodeMixIn, EulaMi
             couch_user._id = old_couch_user.default_account.login_id
 
         return couch_user
+
+    @classmethod
+    def view(cls, view_name, classes=None, **params):
+        if cls is CouchUser:
+            classes = classes or {
+                'CommCareUser': CouchUser,
+                'WebUser': CouchUser,
+            }
+        return super(CouchUser, cls).view(view_name, classes=classes, **params)
 
     @classmethod
     def wrap_correctly(cls, source):
@@ -1470,8 +1492,24 @@ class CommCareUser(CouchUser, SingleMembershipMixin, CommCareMobileContactMixin)
 
     def get_group_ids(self):
         from corehq.apps.groups.models import Group
-
         return Group.by_user(self, wrap=False)
+
+    def set_groups(self, group_ids):
+        from corehq.apps.groups.models import Group
+        desired = set(group_ids)
+        current = set(self.get_group_ids())
+        touched = []
+        for to_add in desired - current:
+            group = Group.get(to_add)
+            group.add_user(self._id, save=False)
+            touched.append(group)
+        for to_remove in current - desired:
+            group = Group.get(to_remove)
+            group.remove_user(self._id, save=False)
+            touched.append(group)
+
+        Group.bulk_save(touched)
+
 
     def get_time_zone(self):
         try:
@@ -1657,7 +1695,7 @@ class WebUser(CouchUser, MultiMembershipMixin, OrgMembershipMixin, CommCareMobil
     @memoized
     def has_permission(self, domain, permission, data=None):
         # is_admin is the same as having all the permissions set
-        if self.is_global_admin():
+        if (self.is_global_admin() and (domain is None or not Domain.get_by_name(domain).restrict_superusers)):
             return True
         elif self.is_domain_admin(domain):
             return True

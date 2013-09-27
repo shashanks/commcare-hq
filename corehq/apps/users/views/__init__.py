@@ -4,6 +4,7 @@ import re
 import urllib
 from django.utils.decorators import method_decorator
 from corehq.apps.domain.views import BaseDomainView
+from corehq.apps.sms.mixin import BadSMSConfigException
 from corehq.apps.users.decorators import require_can_edit_web_users, require_permission_to_edit_user
 from dimagi.utils.decorators.memoized import memoized
 import langcodes
@@ -186,7 +187,7 @@ class BaseEditUserView(BaseUserSettingsView):
             if self.form_user_update.is_valid():
                 if self.form_user_update.update_user(existing_user=self.editable_user, domain=self.domain):
                     messages.success(self.request, _('Changes saved for user "%s"') % self.editable_user.username)
-        return super(BaseEditUserView, self).get(request, *args, **kwargs)
+        return self.get(request, *args, **kwargs)
 
 
 class EditWebUserView(BaseEditUserView):
@@ -385,6 +386,7 @@ def post_user_role(request, domain):
     if role.get_id:
         old_role = UserRole.get(role.get_id)
         assert(old_role.doc_type == UserRole.__name__)
+        assert(old_role.domain == domain)
     role.save()
     return json_response(role)
 
@@ -540,11 +542,14 @@ def verify_phone_number(request, domain, couch_user_id):
     phone_number = urllib.unquote(request.GET['phone_number'])
     user = CouchUser.get_by_user_id(couch_user_id, domain)
 
-    # send verification message
-    smsverify.send_verification(domain, user, phone_number)
+    try:
+        # send verification message
+        smsverify.send_verification(domain, user, phone_number)
 
-    # create pending verified entry if doesn't exist already
-    user.save_verified_number(domain, phone_number, False, None)
+        # create pending verified entry if doesn't exist already
+        user.save_verified_number(domain, phone_number, False, None)
+    except BadSMSConfigException:
+        messages.error(request, "Could not verify phone number. It seems there is no usable SMS backend.")
 
     if user.is_commcare_user():
         from corehq.apps.users.views.mobile import EditCommCareUserView
