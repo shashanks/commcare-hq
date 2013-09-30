@@ -178,8 +178,8 @@ class GSIDSQLPatientReport(GSIDSQLReport):
     def charts(self):
         rows = super(GSIDSQLPatientReport, self).rows
         loc_axis = Axis(label="Location")
-        tests_axis = Axis(label="Number of Tests")
-        chart = MultiBarChart("A sample graph", loc_axis, tests_axis)
+        tests_axis = Axis(label="Number of Tests", format=",.1d")
+        chart = MultiBarChart("Number of Tests Per Location", loc_axis, tests_axis)
         chart.stacked = True
         chart.add_dataset("Male Tests", [{'x':row[-10] , 'y':row[-9]['html'] if row[-9] != "--" else 0} for row in rows], color="#1f07b4")
         chart.add_dataset("Female Tests", [{'x':row[-10] , 'y':row[-8]['html'] if row[-8] != "--" else 0} for row in rows], color="#1077b4")
@@ -273,7 +273,7 @@ class GSIDSQLByDayReport(GSIDSQLReport):
         enddate = self.enddate_obj
         date_axis = Axis(label="Date", dateFormat="%b %d")
         tests_axis = Axis(label="Number of Tests")
-        chart = LineChart("A sample graph", date_axis, tests_axis)
+        chart = LineChart("Number of Tests Per Day", date_axis, tests_axis)
         for row in rows:
             data_points = []
             for n, day in enumerate(self.daterange(startdate, enddate)):

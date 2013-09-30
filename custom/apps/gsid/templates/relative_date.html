@@ -31,9 +31,10 @@
 <script type="text/javascript">
     $(function () {
         $('#{{ css_id }}_relativedate').change(function() { 
-            var diff = parseInt($(this).val()) - 1;
-            if (!diff || diff<0) 
+            var diff = parseInt($(this).val());
+            if (!diff || diff<=0) 
                 {alert("Enter a positive number"); return;}
+            diff = diff -1 ;
             
             var today = new Date();
             todayString = today.getFullYear() + '-'
