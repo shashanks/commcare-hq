@@ -886,6 +886,7 @@ DOMAIN_MODULE_MAP = {
     'cvsulive': 'custom.apps.cvsu',
     'dca-malawi': 'dca',
     'eagles-fahu': 'dca',
+    'gsid': 'custom.apps.gsid',
     'hsph-dev': 'hsph',
     'hsph-betterbirth-pilot-2': 'hsph',
     'mc-inscale': 'custom.reports.mc',
