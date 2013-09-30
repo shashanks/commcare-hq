@@ -23,7 +23,7 @@
         {% blocktrans %}Showing {{ datespan }}.{% endblocktrans %}
     </span>
     <label for="{{ css_id }}_relativedate" style="padding-top: 0.3em;">
-        OR Select last <input type="number" id="{{ css_id }}_relativedate" name="quantity" style="width: 3em;"> days
+        {% blocktrans %}Or Select last <input type="number" id="{{ css_id }}_relativedate" name="quantity" style="width: 3em;"> days{% endblocktrans %}
     </label>
 {% endblock %}
 {% block filter_js %}

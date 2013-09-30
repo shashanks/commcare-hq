@@ -17,7 +17,7 @@ class AsyncTestField(AsyncDrillableField):
                  {"type": "tests", "parent_ref": "disease_id", "references": "test_name", "display": "visible_test_name"}]
 
 class AsyncClinicField(MultiLocationFilter):
-    label = "Country/Province/District/Clinic"
+    label = "Location"
     slug = "clinic"
     hierarchy = [{"type": "country", "display": "country_name"},
                  {"type": "province", "parent_ref": "country_id", "references": "country_id", "display": "province_name"},
