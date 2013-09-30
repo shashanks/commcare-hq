@@ -31,7 +31,7 @@
 <script type="text/javascript">
     $(function () {
         $('#{{ css_id }}_relativedate').change(function() { 
-            var diff = parseInt($(this).val());
+            var diff = parseInt($(this).val()) - 1;
             if (!diff || diff<0) 
                 {alert("Enter a positive number"); return;}
             
