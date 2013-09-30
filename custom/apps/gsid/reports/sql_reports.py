@@ -52,7 +52,7 @@ class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin)
                    enddate=self.datespan.enddate_param_utc,
                    male="male",
                    female="female",
-                   positive="Positive"
+                   positive="POSITIVE"
                 )
 
         DISEASES = self.diseases
