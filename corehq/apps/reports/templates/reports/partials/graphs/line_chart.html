@@ -17,10 +17,10 @@
         //Modify x-values to date-objects and set tickFormat
         {% if chart.x_axis.dateFormat %}
             for (i=0 ; i<chart_data.length; i++){
-                clinic_data = chart_data[i].values;
-                for (j=0; j<clinic_data.length; j++){
-                    date = clinic_data[j].x;
-                    clinic_data[j].x = new Date(date).getTime();
+                single_chart_data = chart_data[i].values;
+                for (j=0; j<single_chart_data.length; j++){
+                    date = single_chart_data[j].x;
+                    single_chart_data[j].x = new Date(date).getTime();
                 }
             }
             
