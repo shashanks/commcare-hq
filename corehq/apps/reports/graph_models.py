@@ -34,6 +34,7 @@ class MultiBarChart(Chart):
         reduceXTicks: True to reduce the number of X ticks
         rotateLabels: Degrees to rotate X-Axis labels e.g. -45
         tooltips: True to show tooltips
+        tooltipFormat: seperator text bw x,y values for tooltipContent e.g." in ", " on  "
         stacked: True to make default view stacked, False for grouped
         staggerLabels: True to stagger the X-Axis labels.
         groupSpacing: Used to adjust amount of space between X-Axis groups. Value between 0 and 1.
@@ -59,6 +60,7 @@ class MultiBarChart(Chart):
         self.reduceXTicks = False
         self.rotateLabels = 0
         self.tooltips = True
+        self.tooltipFormat = ""
         self.stacked = False
         self.translateLabelsX = 0
         self.translateLabelsY = 0
