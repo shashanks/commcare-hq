@@ -10,6 +10,7 @@ from corehq.apps.reports.sqlreport import SqlTabularReport, DatabaseColumn, Summ
 from corehq.apps.reports.standard import CustomProjectReport, DatespanMixin
 from util import get_unique_combinations
 from dimagi.utils.decorators.memoized import memoized
+from corehq.apps.reports.standard.inspect import GenericMapReport
 
 from datetime import datetime, timedelta
 
@@ -85,13 +86,13 @@ class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin)
 
     @property
     def group_by(self):
-        return self.place_types
+        return self.place_types + ["gps"]
 
     @property
     def keys(self):
         combos = get_unique_combinations(self.domain, place_types=self.place_types, place=self.selected_fixture())
         for c in combos:
-            yield [c[pt] for pt in self.place_types]
+            yield [c[pt] for pt in self.place_types] + [c["gps"]]
         #return [['highpoint'], ['high_point']]
 
     def selected_fixture(self):
@@ -114,7 +115,7 @@ class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin)
         for place in self.place_types:
             columns.append(DatabaseColumn(place.capitalize(), SimpleColumn(place)))
 
-        return columns
+        return columns + [DatabaseColumn("gps", SimpleColumn("gps"))]
 
 
 class GSIDSQLPatientReport(GSIDSQLReport):
@@ -426,3 +427,23 @@ class GSIDSQLByAgeReport(GSIDSQLReport):
             ]
 
         return self.common_columns + generate_columns("male") + generate_columns("female")
+
+
+class PatientMapReport(GenericMapReport, CustomProjectReport):
+    name = "Reporting Status (map)"
+    slug = "reportingstatus_map"
+
+    fields = ['custom.apps.gsid.reports.TestField', 
+              'custom.apps.gsid.reports.RelativeDatespanField', 
+              'custom.apps.gsid.reports.AsyncClinicField',
+              'custom.apps.gsid.reports.AggregateAtField']
+
+    data_source = {
+        'adapter': 'report',
+        'geo_column': 'gps',
+        'report': 'custom.apps.gsid.reports.sql_reports.GSIDSQLPatientReport',
+    }
+
+    display_config = {}
+
+
