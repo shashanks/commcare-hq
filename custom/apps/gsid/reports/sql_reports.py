@@ -181,6 +181,7 @@ class GSIDSQLPatientReport(GSIDSQLReport):
         tests_axis = Axis(label="Number of Tests", format=",.1d")
         chart = MultiBarChart("Number of Tests Per Location", loc_axis, tests_axis)
         chart.stacked = True
+        chart.tooltipFormat = " in "
         chart.add_dataset("Male Tests", [{'x':row[-10] , 'y':row[-9]['html'] if row[-9] != "--" else 0} for row in rows], color="#1f07b4")
         chart.add_dataset("Female Tests", [{'x':row[-10] , 'y':row[-8]['html'] if row[-8] != "--" else 0} for row in rows], color="#1077b4")
         return [chart]
