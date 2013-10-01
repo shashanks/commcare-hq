@@ -179,7 +179,7 @@ class GSIDSQLPatientReport(GSIDSQLReport):
     def charts(self):
         rows = super(GSIDSQLPatientReport, self).rows
         loc_axis = Axis(label="Location")
-        tests_axis = Axis(label="Number of Tests", format=",.1d")
+        tests_axis = Axis(label="Number of Tests")
         chart = MultiBarChart("Number of Tests Per Location", loc_axis, tests_axis)
         chart.stacked = True
         chart.tooltipFormat = " in "
