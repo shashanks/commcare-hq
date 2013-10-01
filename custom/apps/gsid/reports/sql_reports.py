@@ -86,7 +86,11 @@ class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin)
 
     @property
     def group_by(self):
-        return self.place_types + ["gps"]
+        gps_key = "gps"
+        agg_at = self.request.GET.get('aggregate_at', None)
+        if agg_at and agg_at is not "clinic":
+            gps_key = "gps_" + agg_at
+        return self.place_types + [gps_key]
 
     @property
     def keys(self):
@@ -115,7 +119,11 @@ class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin)
         for place in self.place_types:
             columns.append(DatabaseColumn(place.capitalize(), SimpleColumn(place)))
 
-        return columns + [DatabaseColumn("gps", SimpleColumn("gps"))]
+        gps_key = "gps"
+        agg_at = self.request.GET.get('aggregate_at', None)
+        if agg_at and agg_at is not "clinic":
+            gps_key = "gps_" + agg_at
+        return columns + [DatabaseColumn("gps", SimpleColumn(gps_key))]
 
 
 class GSIDSQLPatientReport(GSIDSQLReport):
@@ -179,7 +187,7 @@ class GSIDSQLPatientReport(GSIDSQLReport):
     def charts(self):
         rows = super(GSIDSQLPatientReport, self).rows
         loc_axis = Axis(label="Location")
-        tests_axis = Axis(label="Number of Tests")
+        tests_axis = Axis(label="Number of Tests", format=",.1d")
         chart = MultiBarChart("Number of Tests Per Location", loc_axis, tests_axis)
         chart.stacked = True
         chart.tooltipFormat = " in "
@@ -274,13 +282,13 @@ class GSIDSQLByDayReport(GSIDSQLReport):
         startdate = self.startdate_obj
         enddate = self.enddate_obj
         date_axis = Axis(label="Date", dateFormat="%b %d")
-        tests_axis = Axis(label="Number of Tests", format=",.1d")
+        tests_axis = Axis(label="Number of Tests")
         chart = LineChart("Number of Tests Per Day", date_axis, tests_axis)
         for row in rows:
             data_points = []
             for n, day in enumerate(self.daterange(startdate, enddate)):
                 x = day
-                y = 0 if row[date_index + n] == "--" else row[date_index + n]
+                y = 0 if row[date_index + n + 1] == "--" else row[date_index + n + 1]
                 data_points.append({'x':x , 'y':y})
             color = int(hashlib.md5(row[date_index-1]).hexdigest(), 16)
             color = str(hex(color))
