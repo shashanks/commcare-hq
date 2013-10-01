@@ -183,8 +183,8 @@ class GSIDSQLPatientReport(GSIDSQLReport):
         chart = MultiBarChart("Number of Tests Per Location", loc_axis, tests_axis)
         chart.stacked = True
         chart.tooltipFormat = " in "
-        chart.add_dataset("Male Tests", [{'x':row[-10] , 'y':row[-9]['html'] if row[-9] != "--" else 0} for row in rows], color="#1f07b4")
-        chart.add_dataset("Female Tests", [{'x':row[-10] , 'y':row[-8]['html'] if row[-8] != "--" else 0} for row in rows], color="#1077b4")
+        chart.add_dataset("Male Tests", [{'x':row[-11] , 'y':row[-9]['html'] if row[-9] != "--" else 0} for row in rows], color="#1f07b4")
+        chart.add_dataset("Female Tests", [{'x':row[-11] , 'y':row[-8]['html'] if row[-8] != "--" else 0} for row in rows], color="#1077b4")
         return [chart]
 
 class GSIDSQLByDayReport(GSIDSQLReport):
@@ -274,7 +274,7 @@ class GSIDSQLByDayReport(GSIDSQLReport):
         startdate = self.startdate_obj
         enddate = self.enddate_obj
         date_axis = Axis(label="Date", dateFormat="%b %d")
-        tests_axis = Axis(label="Number of Tests")
+        tests_axis = Axis(label="Number of Tests", format=",.1d")
         chart = LineChart("Number of Tests Per Day", date_axis, tests_axis)
         for row in rows:
             data_points = []
@@ -439,7 +439,7 @@ class PatientMapReport(GenericMapReport, CustomProjectReport):
               'custom.apps.gsid.reports.AggregateAtField']
 
     data_source = {
-        'adapter': 'report',
+        'adapter': 'legacyreport',
         'geo_column': 'gps',
         'report': 'custom.apps.gsid.reports.sql_reports.GSIDSQLPatientReport',
     }
