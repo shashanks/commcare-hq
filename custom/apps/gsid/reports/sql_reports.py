@@ -10,6 +10,7 @@ from corehq.apps.reports.sqlreport import SqlTabularReport, DatabaseColumn, Summ
 from corehq.apps.reports.standard import CustomProjectReport, DatespanMixin
 from util import get_unique_combinations
 from dimagi.utils.decorators.memoized import memoized
+from corehq.apps.reports.standard.inspect import GenericMapReport
 
 from datetime import datetime, timedelta
 
@@ -85,13 +86,17 @@ class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin)
 
     @property
     def group_by(self):
-        return self.place_types
+        gps_key = "gps"
+        agg_at = self.request.GET.get('aggregate_at', None)
+        if agg_at and agg_at is not "clinic":
+            gps_key = "gps_" + agg_at
+        return self.place_types + [gps_key]
 
     @property
     def keys(self):
         combos = get_unique_combinations(self.domain, place_types=self.place_types, place=self.selected_fixture())
         for c in combos:
-            yield [c[pt] for pt in self.place_types]
+            yield [c[pt] for pt in self.place_types] + [c["gps"]]
         #return [['highpoint'], ['high_point']]
 
     def selected_fixture(self):
@@ -114,7 +119,11 @@ class GSIDSQLReport(SummingSqlTabularReport, CustomProjectReport, DatespanMixin)
         for place in self.place_types:
             columns.append(DatabaseColumn(place.capitalize(), SimpleColumn(place)))
 
-        return columns
+        gps_key = "gps"
+        agg_at = self.request.GET.get('aggregate_at', None)
+        if agg_at and agg_at is not "clinic":
+            gps_key = "gps_" + agg_at
+        return columns + [DatabaseColumn("gps", SimpleColumn(gps_key))]
 
 
 class GSIDSQLPatientReport(GSIDSQLReport):
@@ -182,8 +191,8 @@ class GSIDSQLPatientReport(GSIDSQLReport):
         chart = MultiBarChart("Number of Tests Per Location", loc_axis, tests_axis)
         chart.stacked = True
         chart.tooltipFormat = " in "
-        chart.add_dataset("Male Tests", [{'x':row[-10] , 'y':row[-9]['html'] if row[-9] != "--" else 0} for row in rows], color="#1f07b4")
-        chart.add_dataset("Female Tests", [{'x':row[-10] , 'y':row[-8]['html'] if row[-8] != "--" else 0} for row in rows], color="#1077b4")
+        chart.add_dataset("Male Tests", [{'x':row[-11] , 'y':row[-9]['html'] if row[-9] != "--" else 0} for row in rows], color="#1f07b4")
+        chart.add_dataset("Female Tests", [{'x':row[-11] , 'y':row[-8]['html'] if row[-8] != "--" else 0} for row in rows], color="#1077b4")
         return [chart]
 
 class GSIDSQLByDayReport(GSIDSQLReport):
@@ -279,7 +288,7 @@ class GSIDSQLByDayReport(GSIDSQLReport):
             data_points = []
             for n, day in enumerate(self.daterange(startdate, enddate)):
                 x = day
-                y = 0 if row[date_index + n] == "--" else row[date_index + n]
+                y = 0 if row[date_index + n + 1] == "--" else row[date_index + n + 1]
                 data_points.append({'x':x , 'y':y})
             color = int(hashlib.md5(row[date_index-1]).hexdigest(), 16)
             color = str(hex(color))
@@ -426,3 +435,22 @@ class GSIDSQLByAgeReport(GSIDSQLReport):
             ]
 
         return self.common_columns + generate_columns("male") + generate_columns("female")
+
+
+class PatientMapReport(GenericMapReport, CustomProjectReport):
+    name = "Reporting Status (map)"
+    slug = "reportingstatus_map"
+
+    fields = ['custom.apps.gsid.reports.TestField', 
+              'custom.apps.gsid.reports.RelativeDatespanField', 
+              'custom.apps.gsid.reports.AsyncClinicField',
+              'custom.apps.gsid.reports.AggregateAtField']
+
+    data_source = {
+        'adapter': 'legacyreport',
+        'geo_column': 'gps',
+        'report': 'custom.apps.gsid.reports.sql_reports.GSIDSQLPatientReport',
+    }
+
+    display_config = {}
+

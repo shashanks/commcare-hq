@@ -1,5 +1,5 @@
 from custom.apps.gsid.reports.sql_reports import GSIDSQLPatientReport, GSIDSQLByDayReport, GSIDSQLTestLotsReport, \
-	GSIDSQLByAgeReport
+	GSIDSQLByAgeReport, PatientMapReport
 
 CUSTOM_REPORTS = (
     ('Custom Reports', (
@@ -8,7 +8,8 @@ CUSTOM_REPORTS = (
         GSIDSQLPatientReport,
         GSIDSQLByDayReport,
         GSIDSQLTestLotsReport,
-        GSIDSQLByAgeReport
+        GSIDSQLByAgeReport,
+        PatientMapReport
     )),
 
 )
