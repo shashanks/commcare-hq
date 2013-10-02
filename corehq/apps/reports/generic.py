@@ -403,8 +403,8 @@ class GenericReportView(CacheableRequestMixIn):
 
         ds_field = to_function('corehq.apps.reports.fields.DatespanField')
         ds_filter = to_function('corehq.apps.reports.filters.dates.DatespanFilter')
-
-        has_datespan = any([ issubclass(to_function(field), ds_filter) or issubclass(to_function(field), ds_field) for field in self.fields])
+        has_datespan = any([ issubclass(to_function(field), ds_filter) or issubclass(to_function(field), ds_field) 
+                           for field in self.fields])
 
         self.context.update(
             report=dict(

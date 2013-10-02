@@ -10,13 +10,13 @@ def get_unique_combinations(domain, place_types=None, place=None):
     if place:
         place_type = place[0]
         place = FixtureDataItem.get(place[1])
-        place_name = place.fields[place_type+'_id']
+        place_name = place.fields[place_type + '_id']
 
     place_data_types = {}
     for pt in place_types:
         place_data_types[pt] = FixtureDataType.by_domain_tag(domain, pt).one()
 
-    relevant_types =  [t for t in reversed(place_types)]
+    relevant_types = [t for t in reversed(place_types)]
     base_type = relevant_types[0] if relevant_types else ""
     fdis = FixtureDataItem.by_data_type(domain, place_data_types[base_type].get_id) if base_type else []
 
@@ -24,7 +24,7 @@ def get_unique_combinations(domain, place_types=None, place=None):
     for fdi in fdis:
         if place:
             if base_type == place_type:
-                if fdi.fields[base_type+'_id'] != place_name:
+                if fdi.fields[base_type + '_id'] != place_name:
                     continue
             else:
                 rel_type_name = fdi.fields.get(place_type+"_id", "")
@@ -36,10 +36,10 @@ def get_unique_combinations(domain, place_types=None, place=None):
         comb = {}
         for pt in place_types:
             if base_type == pt:
-                comb[pt] = str(fdi.fields[pt+'_id'])
+                comb[pt] = str(fdi.fields[pt + '_id'])
                 comb["gps"] = str(fdi.fields["gps"])
             else:
-                p_id = fdi.fields.get(pt+"_id", None)
+                p_id = fdi.fields.get(pt + "_id", None)
                 if p_id:
                     if place and pt == place_type and p_id != place_name:
                         continue

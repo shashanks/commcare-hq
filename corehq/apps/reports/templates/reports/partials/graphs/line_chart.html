@@ -22,8 +22,7 @@
                     date = single_chart_data[j].x;
                     single_chart_data[j].x = new Date(date).getTime();
                 }
-            }
-            
+            }            
             chart.xAxis.tickFormat(function(d) {return d3.time.format({{ chart.x_axis.dateFormat|JSON }})(new Date(d)); })
         {% endif %}
 

@@ -1,3 +1,6 @@
+{#    Modification of filters/drillable_async.html  #}
+{#        Displays all fields simoltaneously, without needing to drilling-down, #}
+{#        where parent nodes are unknown.  #}
 {# todo: clean this up to properly inherit from filters/base.html #}
 
 <label class="control-label">{{ control_name }}</label> {# this is wrong, this should be inheriting the structure from filters/base.html, see base/drilldown_options #}
@@ -19,9 +22,10 @@
         var params = (fdi_uuid ? {parent_id: fdi_uuid} : {});
         params["parent_ref_name"] = hierarchy[depth]["parent_ref"];
         if (fdi_uuid != "_all"){
-        params["child_type"] = hierarchy[depth]["id"];}
+            params["child_type"] = hierarchy[depth]["id"];}
         else{
-        params["fixture_type"] = hierarchy[depth]["type"];}
+            params["fixture_type"] = hierarchy[depth]["type"];
+        }
         params["references"] = hierarchy[depth]["references"];
         $('#fdi_ajax').show();
         $.getJSON(LOAD_FDIS_URL, params, function(allData) {
@@ -33,6 +37,7 @@
     $(function() {
         var fdis = {{ fdis|safe }};
         $.each(fdis, function(i, fdi){
+            //initial list of fdis doesn't contain fixture_type properties
             fdi.fixture_type = hierarchy[0].type;
         });
 
@@ -73,23 +78,27 @@
         this.children = ko.observableArray();
         this.depth = depth || 0;
         this.children_loaded = false;
+        // helper in loading fixtures fields one by one
         all_loaded = false
 
 
         this.display_name = ko.computed(function() {
             if (depth>0 && this.name() == '_all') 
-                return "All ("+hierarchy[depth-1]["type"]+")" 
+                return "All ("+hierarchy[depth-1]["type"]+")";
+
             return this.name() == '_all' ? 'All '+data.fixture_type : this.name();
         }, this);
 
         this.selected_child = ko.observable();
         // when a fixture is selected, update the drill-down tree
+        // only if they all fixtures are not laoded already at the start
         this.selected_child.subscribe(function(val) {
             if (all_loaded) {
                 if (val!="_all" && val!=null && val.uuid()!="_all")
-                $("input[name='fixture_id']").val(val.type()+":"+val.uuid());
+                    $("input[name='fixture_id']").val(val.type()+":"+val.uuid());
                 else
-                $("input[name='fixture_id']").val("");
+                    $("input[name='fixture_id']").val("");
+
                 return val;}
             if (val == null || val.depth >= hierarchy.length || val == "_all") { all_loaded = true;
                 return;
@@ -126,8 +135,10 @@
         };
 
         this.load = function(data) {
-            if (data.fields.name == '_all') this.name('_all');
-            else if (this.depth > 0) this.name(data.fields[hierarchy[this.depth-1]["display"]] || null);
+            if (data.fields.name == '_all') 
+                this.name('_all');
+            else if (this.depth > 0) 
+                this.name(data.fields[hierarchy[this.depth-1]["display"]] || null);
             this.type(data.fixture_type);
             this.uuid(data.id || "_all");
             if (data.children != null) {
@@ -146,12 +157,12 @@
                 children.splice(0, 0, {fields: {name: '_all'}});
             }
             this.children($.map(children, function(e) {
-                if (e.id==selected){console.log("ffffff");
+                if (e.id==selected){
                     var to_ret = new FixtureModel(e, root, fixt.depth + 1);
                     return to_ret;
                 }
                 else
-                return new FixtureModel(e, root, fixt.depth + 1);
+                    return new FixtureModel(e, root, fixt.depth + 1);
             }));
             this.children_loaded = true;
         };
