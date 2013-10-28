@@ -1,6 +1,7 @@
 from xml.etree import ElementTree
 from corehq.apps.users.models import CommCareUser
-from couchdbkit.ext.django.schema import Document, DictProperty, StringProperty, StringListProperty, IntegerProperty, BooleanProperty
+from couchdbkit.ext.django.schema import (Document, DictProperty, StringProperty, StringListProperty, IntegerProperty,
+                                          BooleanProperty, DocumentSchema, SchemaListProperty)
 from corehq.apps.groups.models import Group
 from dimagi.utils.couch.bulk import CouchTransaction
 from dimagi.utils.couch.database import get_db
@@ -8,12 +9,27 @@ from dimagi.utils.couch.database import get_db
 class FixtureTypeCheckError(Exception):
     pass
 
+
+class FixtureProperty(DocumentSchema):
+    name = StringProperty
+    properties = DictProperty()
+
 class FixtureDataType(Document):
     domain = StringProperty()
     is_global = BooleanProperty(default=False)
     tag = StringProperty()
     name = StringProperty()
     fields = StringListProperty()
+    new_fields = SchemaListProperty(FixtureProperty)
+
+    @classmethod
+    def wrap(cls, obj):
+        instance = super(FixtureDataType, cls).wrap(obj)
+        if instance.fields and not instance.new_fields:
+            instance.new_fields = [FixtureProperty(name=name) for name in instance.fields]
+
+    def get_fields(self):
+        return [f.name for f in self.new_fields]
 
     @classmethod
     def by_domain(cls, domain):
