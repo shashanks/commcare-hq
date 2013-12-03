@@ -33,3 +33,14 @@ class BuildErrorsTest(TestCase):
         self.assertIn(update_path_error, errors)
         self.assertIn(subcase_path_error, errors)
 
+        with open(os.path.join(os.path.dirname(__file__), 'data', 'subcase-details2.json')) as f:
+            source2 = json.load(f)
+
+        app2 = Application.wrap(source2)
+        errors2 = app2.validate_app()
+        print "\n\nHERE BE ERRORS"
+        print errors
+        print errors2
+        case_type_error = {'message': u'Case type (nonexistent) for form (Register) does not exist', 'type': 'error'}
+        self.assertIn(case_type_error, errors2)
+
