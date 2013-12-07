@@ -304,8 +304,7 @@ class SubmissionsByFormReport(WorkerMonitoringReportTableBase, MultiFormDrilldow
     name = ugettext_noop("Submissions By Form")
     slug = "submissions_by_form"
     fields = [
-        'corehq.apps.reports.fields.FilterUsersField',
-        'corehq.apps.reports.fields.GroupField',
+        'corehq.apps.reports.filters.users.ExpandedMobileWorkerFilter',
         'corehq.apps.reports.filters.forms.FormsByApplicationFilter',
         'corehq.apps.reports.fields.DatespanField'
     ]
@@ -337,7 +336,8 @@ class SubmissionsByFormReport(WorkerMonitoringReportTableBase, MultiFormDrilldow
     def rows(self):
         rows = []
         totals = [0]*(len(self.all_relevant_forms)+1)
-        for user in self.users:
+        users_data = ExpandedMobileWorkerFilter.pull_users_and_groups(self.domain, self.request, True, True)
+        for user in users_data["combined_users"]:
             row = []
             if self.all_relevant_forms:
                 for form in self.all_relevant_forms.values():
@@ -745,10 +745,10 @@ class WorkerActivityTimes(WorkerMonitoringChartBase,
         chart.add_data(d)
 
         # mapping between numbers 0..6 and its day of the week label
-        day_names = "Sun Mon Tue Wed Thu Fri Sat".split(" ")
+        day_names = "Mon Tue Wed Thu Fri Sat Sun".split(" ")
         # the order, bottom-to-top, in which the days should appear
         # i.e. Sun, Sat, Fri, Thu, etc
-        days = (0, 6, 5, 4, 3, 2, 1)
+        days = (6, 5, 4, 3, 2, 1, 0)
 
         sizes=[]
         for d in days:
