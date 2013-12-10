@@ -507,7 +507,7 @@ class ViewMultimediaFile(View):
         obj = CachedObject(str(self.doc_id) + ':' + self.kwargs.get('media_type'))
         if not obj.is_cached():
             data, content_type = self.multimedia.get_display_file()
-            if self.thumb:
+            if False:
                 data = CommCareImage.get_thumbnail_data(data, self.thumb)
             buffer = StringIO(data)
             metadata = {'content_type': content_type}
