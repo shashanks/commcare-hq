@@ -7,10 +7,12 @@ from datetime import datetime, date, timedelta
 from calendar import monthrange
 import math
 import bisect
+from lxml.builder import ElementMaker
+from corehq.apps.commtrack import const
+from corehq.apps.commtrack.const import USER_LOCATION_OWNER_MAP_TYPE
 from corehq.apps.hqcase.utils import submit_case_blocks
 from casexml.apps.case.mock import CaseBlock
 from casexml.apps.case.xml import V2
-from corehq.apps.commtrack.const import USER_LOCATION_OWNER_MAP_TYPE
 
 
 def all_supply_point_types(domain):
@@ -26,7 +28,7 @@ def supply_point_type_categories(domain):
 def all_sms_codes(domain):
     config = CommtrackConfig.for_domain(domain)
 
-    actions = dict((action_config._keyword(False), action_config) for action_config in config.actions)
+    actions = dict((action.keyword, action) for action in config.actions)
     products = dict((p.code, p) for p in Product.by_domain(domain))
     commands = {
         config.multiaction_keyword: {'type': 'stock_report_generic', 'caption': 'Stock Report'},
@@ -54,11 +56,11 @@ def make_product(domain, name, code):
     p = Product()
     p.domain = domain
     p.name = name
-    p.code = code.lower()
+    p.code = code
     p.save()
     return p
 
-def bootstrap_commtrack_settings_if_necessary(domain, requisitions_enabled=True):
+def bootstrap_commtrack_settings_if_necessary(domain, requisitions_enabled=False): #True):
     if not(domain and domain.commtrack_enabled and not domain.commtrack_settings):
         return
 
@@ -68,34 +70,30 @@ def bootstrap_commtrack_settings_if_necessary(domain, requisitions_enabled=True)
         multiaction_keyword='report',
         actions=[
             CommtrackActionConfig(
-                action_type='receipts',
+                action='receipts',
                 keyword='r',
                 caption='Received',
-                name='received',
             ),
             CommtrackActionConfig(
-                action_type='consumption',
+                action='consumption',
                 keyword='c',
                 caption='Consumed',
-                name='consumed',
             ),
             CommtrackActionConfig(
-                action_type='consumption',
+                action='consumption',
+                subaction='loss',
                 keyword='l',
                 caption='Losses',
-                name='lost',
             ),
             CommtrackActionConfig(
-                action_type='stockonhand',
+                action='stockonhand',
                 keyword='soh',
                 caption='Stock on hand',
-                name='stock_on_hand',
             ),
             CommtrackActionConfig(
-                action_type='stockout',
+                action='stockout',
                 keyword='so',
                 caption='Stock-out',
-                name='stock_out',
             ),
         ],
         location_types=[
@@ -177,7 +175,7 @@ def due_date_monthly(day, from_end=False, past_period=0):
     return date(y, m, min(day, monthrange(y, m)[1]))
 
 def num_periods_late(product_case, schedule, *schedule_args):
-    last_reported = getattr(product_case, 'last_reported', datetime(2000, 1, 1)).date()
+    last_reported = datetime.strptime(getattr(product_case, 'last_reported', '2000-01-01')[:10], '%Y-%m-%d').date()
 
     class DueDateStream(object):
         """mimic an array of due dates to perform a binary search"""

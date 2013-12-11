@@ -73,6 +73,9 @@ class StockStatusDataSource(ReportDataSource, CommtrackDataSourceMixin):
     SLUG_CURRENT_STOCK = 'current_stock'
     SLUG_LOCATION_ID = 'location_id'
     SLUG_LOCATION_LINEAGE = 'location_lineage'
+    SLUG_STOCKOUT_SINCE = 'stockout_since'
+    SLUG_STOCKOUT_DURATION = 'stockout_duration'
+    SLUG_LAST_REPORTED = 'last_reported'
 
     SLUG_CATEGORY = 'category'
     _slug_attrib_map = {
@@ -84,6 +87,9 @@ class StockStatusDataSource(ReportDataSource, CommtrackDataSourceMixin):
         SLUG_CONSUMPTION: 'monthly_consumption',
         SLUG_MONTHS_REMAINING: 'months_until_stockout',
         SLUG_CATEGORY: 'current_stock_category',
+        SLUG_STOCKOUT_SINCE: 'stocked_out_since',
+        SLUG_STOCKOUT_DURATION: 'stockout_duration_in_months',
+        SLUG_LAST_REPORTED: 'last_reported',
     }
 
     def slugs(self):
@@ -200,7 +206,7 @@ class ReportingStatusDataSource(ReportDataSource, CommtrackDataSourceMixin):
 
         def latest_case(cases):
             # getting last report date should probably be moved to a util function in a case wrapper class
-            return max(cases, key=lambda c: getattr(c, 'last_reported', datetime(2000, 1, 1)).date())
+            return max(cases, key=lambda c: getattr(c, 'last_reported', '2000-01-01'))
         cases_by_site = map_reduce(lambda c: [(tuple(c.location_),)],
                                    lambda v: reporting_status(latest_case(v)),
                                    data=product_cases, include_docs=True)
