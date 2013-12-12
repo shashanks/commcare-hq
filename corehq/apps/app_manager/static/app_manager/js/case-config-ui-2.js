@@ -1,5 +1,7 @@
 /*globals $, _, ko, COMMCAREHQ */
 
+var action_names = ["open_case", "update_case", "close_case", "case_preload"];
+
 var CaseConfig = (function () {
     "use strict";
 
@@ -25,6 +27,7 @@ var CaseConfig = (function () {
         self.caseType = params.caseType;
         self.reserved_words = params.reserved_words;
         self.moduleCaseTypes = params.moduleCaseTypes;
+<<<<<<< HEAD
         self.propertiesMap = {};
         self.showCaseReferences = params.showCaseReferences;
         self.caseReferences = params.caseReferences;
@@ -48,6 +51,9 @@ var CaseConfig = (function () {
             self.propertiesMap = ko.mapping.fromJS(params.propertiesMap);
         };
         self.setPropertiesMap(params.propertiesMap);
+=======
+        self.propertiesMap = ko.mapping.fromJS(params.propertiesMap);
+>>>>>>> master
 
         self.saveButton = COMMCAREHQ.SaveButton.init({
             unsavedMessage: "You have unchanged case settings",
@@ -105,6 +111,13 @@ var CaseConfig = (function () {
             _(self.caseConfigViewModel.subcases()).each(function (case_transaction) {
                 case_transaction.ensureBlankProperties();
             });
+        };
+
+        self.getQuestions = function (filter, excludeHidden, includeRepeat) {
+            return CC_UTILS.getQuestions(self.questions, filter, excludeHidden, includeRepeat);
+        };
+        self.getAnswers = function (condition) {
+            return CC_UTILS.getAnswers(self.questions, condition);
         };
 
         self.change = function () {
@@ -673,6 +686,7 @@ var CaseConfig = (function () {
         }
     };
 
+<<<<<<< HEAD
     var action_names = ["open_case", "update_case", "close_case", "case_preload"];
     CaseConfig.prototype.getQuestionLabel = function (path) {
         for (var i = 0; i < this.questions.length; i += 1) {
@@ -725,6 +739,8 @@ var CaseConfig = (function () {
         }
         return options;
     };
+=======
+>>>>>>> master
     return {
         CaseConfig: CaseConfig
     };
