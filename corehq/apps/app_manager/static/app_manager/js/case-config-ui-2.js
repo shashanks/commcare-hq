@@ -30,6 +30,7 @@ var CaseConfig = (function () {
         self.showCaseReferences = params.showCaseReferences;
         self.caseReferences = params.caseReferences;
         self.caseReferenceTypes = params.caseReferenceTypes;
+        self.utils = utils;
         self.propertiesMap = ko.mapping.fromJS(params.propertiesMap);
 
         self.saveButton = COMMCAREHQ.SaveButton.init({
@@ -677,6 +678,18 @@ var CaseConfig = (function () {
         }
     };
 
+    CaseConfig.prototype.getQuestionLabel = function (path) {
+        for (var i = 0; i < this.questions.length; i += 1) {
+            var q = this.questions[i];
+            if (q.value === path) {
+                return q.label;
+            }
+        }
+        return path;
+    };
+    CaseConfig.prototype.getPropertyName = function (property) {
+        return this.caseReferenceTypes[property];
+    }
     return {
         CaseConfig: CaseConfig
     };
