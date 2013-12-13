@@ -73,6 +73,13 @@ class Program(Document):
     code = StringProperty()
     description = StringProperty()
 
+    @classmethod
+    def get_by_code(cls, domain, code):
+        result = cls.view("commtrack/program_by_code",
+                          key=[domain, code],
+                          include_docs=True,
+                          limit=1).first()
+        return result
 
 class Product(Document):
     """
@@ -132,7 +139,7 @@ def product_fixture_generator(user, version=V1, last_sync=None):
                           'cost']
         for product_field in product_fields:
             field = ElementTree.Element(product_field)
-            field.text = str(getattr(product_data, product_field) or '')
+            field.text = unicode(getattr(product_data, product_field) or '')
             product.append(field)
 
     return [root]
@@ -224,6 +231,10 @@ class OpenLMISConfig(DocumentSchema):
     password = StringProperty()
 
     using_requisitions = BooleanProperty(default=False) # whether openlmis handles our requisitions for us
+
+    @property
+    def is_configured(self):
+        return True if self.enabled and self.url and self.password and self.username else False
 
 
 class CommtrackConfig(Document):
@@ -935,8 +946,10 @@ class RequisitionCase(CommCareCase):
     @classmethod
     def get_by_external_id(cls, domain, external_id):
         return cls.view('hqcase/by_domain_external_id',
-                        key=[domain, external_id],
-                        inlude_docs=True)
+            key=[domain, external_id],
+            include_docs=True, reduce=False,
+            classes={'CommCareCase': RequisitionCase}
+        ).all()
 
     @classmethod
     def get_display_config(cls):

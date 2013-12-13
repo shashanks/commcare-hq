@@ -229,6 +229,7 @@ class Domain(Document, HQBillingDomainMixin, SnapshotMixin):
     commtrack_enabled = BooleanProperty(default=False)
     call_center_config = SchemaProperty(CallCenterProperties)
     restrict_superusers = BooleanProperty(default=False)
+    location_restriction_for_users = BooleanProperty(default=True)
 
     case_display = SchemaProperty(CaseDisplaySettings)
 
@@ -953,6 +954,17 @@ class Domain(Document, HQBillingDomainMixin, SnapshotMixin):
         if self.is_snapshot:
             self.full_downloads = self.copied_from.total_downloads
         return self.full_downloads
+
+    @property
+    @memoized
+    def published_by(self):
+        from corehq.apps.users.models import CouchUser
+        pb_id = self.cda.user_id
+        return CouchUser.get_by_user_id(pb_id) if pb_id else None
+
+    @property
+    def name_of_publisher(self):
+        return self.published_by.human_friendly_name if self.published_by else ""
 
 class DomainCounter(Document):
     domain = StringProperty()

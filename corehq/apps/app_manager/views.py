@@ -15,6 +15,7 @@ from django.utils.translation import ugettext as _
 from django.views.decorators.cache import cache_control
 from corehq import ApplicationsTab, toggles
 from corehq.apps.app_manager import commcare_settings
+from corehq.apps.app_manager.exceptions import RearrangeError
 from corehq.apps.app_manager.templatetags.xforms_extras import trans
 from corehq.apps.sms.views import get_sms_autocomplete_context
 from django.utils.http import urlencode as django_urlencode
@@ -230,6 +231,18 @@ def app_source(req, domain, app_id):
     return HttpResponse(app.export_json())
 
 @login_and_domain_required
+def copy_app_check_domain(req, domain):
+    app_id = req.GET.get('app')
+    name = req.GET.get('name')
+
+    app_copy = import_app_util(app_id, domain, name=name)
+    return back_to_main(req, app_copy.domain, app_id=app_copy._id)
+
+@login_and_domain_required
+def copy_app(req, domain):
+    return copy_app_check_domain(req, req.GET.get('domain'))
+
+@login_and_domain_required
 def import_app(req, domain, template="app_manager/import_app.html"):
     if req.method == "POST":
         _clear_app_cache(req, domain)
@@ -256,7 +269,7 @@ def import_app(req, domain, template="app_manager/import_app.html"):
                     messages.error(req, "We can't find a project called %s." % redirect_domain)
                 else:
                     messages.error(req, "You left the project name blank.")
-                return HttpResponseRedirect(req.META['HTTP_REFERER'])
+                return HttpResponseRedirect(req.META.get('HTTP_REFERER', req.path))
 
         if app_id:
             app = get_app(None, app_id)
@@ -524,12 +537,10 @@ def release_manager(request, domain, app_id, template='app_manager/releases.html
 
     saved_apps = []
 
-    users_cannot_share = CommCareUser.cannot_share(domain)
     context.update({
         'release_manager': True,
         'saved_apps': saved_apps,
         'latest_release': latest_release,
-        'users_cannot_share': users_cannot_share,
     })
     if not app.is_remote_app():
         # Multimedia is not supported for remote applications at this time.
@@ -585,19 +596,15 @@ def get_module_view_context_and_template(app, module):
     )
 
     def get_parent_modules_and_save(case_type):
-        """
-        This closure is so we don't override the `module` variable
-
-        """
         parent_types = builder.get_parent_types(case_type)
         modules = app.modules
         # make sure all modules have unique ids
-        if any(not module.unique_id for module in modules):
-            for module in modules:
-                module.get_or_create_unique_id()
+        if any(not mod.unique_id for mod in modules):
+            for mod in modules:
+                mod.get_or_create_unique_id()
             app.save()
-        parent_module_ids = [module.unique_id for module in modules
-                             if module.case_type in parent_types]
+        parent_module_ids = [mod.unique_id for mod in modules
+                             if mod.case_type in parent_types]
         return [{
                     'unique_id': mod.unique_id,
                     'name': mod.name,
@@ -681,7 +688,9 @@ def view_generic(req, domain, app_id=None, module_id=None, form_id=None, is_user
 
     v2_app = app and app.application_version == APP_V2
     context.update({
-        'show_care_plan': (v2_app and toggle_enabled(toggles.APP_BUILDER_CAREPLAN, req.user.username)),
+        'show_care_plan': (v2_app
+                           and not (app and app.has_careplan_module)
+                           and toggle_enabled(toggles.APP_BUILDER_CAREPLAN, req.user.username)),
         'module': module,
         'form': form,
     })
@@ -850,8 +859,15 @@ def new_module(req, domain, app_id):
         response.set_cookie('suppress_build_errors', 'yes')
         return response
     elif module_type == 'careplan':
-        if app.application_version == APP_V1:
-            messages.warning(req, _('Please upgrade you app to > 2.0 in order to add a Careplan module'))
+        validations = [
+            (lambda a: a.application_version == APP_V1,
+             _('Please upgrade you app to > 2.0 in order to add a Careplan module')),
+            (lambda a: app.has_careplan_module,
+             _('This application already has a Careplan module'))
+        ]
+        error = next((v[1] for v in validations if v[0](app)), None)
+        if error:
+            messages.warning(req, error)
             return back_to_main(req, domain, app_id=app.id)
         else:
             return _new_careplan_module(req, domain, app, name, lang)
@@ -1346,42 +1362,6 @@ def edit_commcare_profile(request, domain, app_id):
 
 @no_conflict_require_POST
 @require_can_edit_apps
-def edit_app_lang(req, domain, app_id):
-    """
-    DEPRECATED
-    Called when an existing language (such as 'zh') is changed (e.g. to 'zh-cn')
-    or when a language is to be added.
-
-    """
-    lang = req.POST['lang']
-    lang_id = int(req.POST.get('index', -1))
-    app = get_app(domain, app_id)
-    if lang_id == -1:
-        if lang in app.langs:
-            messages.error(req, "Language %s already exists" % lang)
-        else:
-            try:
-                validate_lang(lang)
-            except ValueError as e:
-                messages.error(req, unicode(e))
-            else:
-                app.langs.append(lang)
-                app.save()
-    else:
-        try:
-            app.rename_lang(app.langs[lang_id], lang)
-        except AppError as e:
-            messages.error(req, unicode(e))
-        except ValueError as e:
-            messages.error(req, unicode(e))
-        else:
-            app.save()
-
-    return back_to_main(req, domain, app_id=app_id)
-
-
-@no_conflict_require_POST
-@require_can_edit_apps
 def edit_app_langs(request, domain, app_id):
     """
     Called with post body:
@@ -1582,13 +1562,21 @@ def rearrange(req, domain, app_id, key):
     resp = {}
     module_id = None
 
-    if "forms" == key:
-        to_module_id = int(req.POST['to_module_id'])
-        from_module_id = int(req.POST['from_module_id'])
-        if app.rearrange_forms(to_module_id, from_module_id, i, j) == 'case type conflict':
-            messages.warning(req, CASE_TYPE_CONFLICT_MSG,  extra_tags="html")
-    elif "modules" == key:
-        app.rearrange_modules(i, j)
+    try:
+        if "forms" == key:
+            to_module_id = int(req.POST['to_module_id'])
+            from_module_id = int(req.POST['from_module_id'])
+            if app.rearrange_forms(to_module_id, from_module_id, i, j) == 'case type conflict':
+                messages.warning(req, CASE_TYPE_CONFLICT_MSG,  extra_tags="html")
+        elif "modules" == key:
+            app.rearrange_modules(i, j)
+    except RearrangeError:
+        messages.error(req, _(
+            'Oops. '
+            'Looks like you got out of sync with us. '
+            'The sidebar has been updated, so please try again.'
+        ))
+        return back_to_main(req, domain, app_id=app_id, module_id=module_id)
     app.save(resp)
     if ajax:
         return HttpResponse(json.dumps(resp))

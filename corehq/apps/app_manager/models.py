@@ -54,7 +54,8 @@ from corehq.apps.app_manager import current_builds, app_strings, remote_app
 from corehq.apps.app_manager import fixtures, suite_xml, commcare_settings
 from corehq.apps.app_manager.util import split_path, save_xform, get_correct_app_class
 from corehq.apps.app_manager.xform import XForm, parse_xml as _parse_xml
-from .exceptions import AppError, VersioningError, XFormError, XFormValidationError
+from corehq.apps.app_manager.templatetags.xforms_extras import trans
+from .exceptions import AppError, VersioningError, XFormError, XFormValidationError, RearrangeError
 
 
 DETAIL_TYPES = ['case_short', 'case_long', 'ref_short', 'ref_long']
@@ -476,13 +477,24 @@ class FormBase(DocumentSchema):
         self.source = source
 
     def default_name(self):
-        return self.name[self.get_app().default_language]
+        app = self.get_app()
+        return trans(
+            self.name,
+            [app.default_language] + app.build_langs,
+            include_lang=False
+        )
 
     @property
     def full_path_name(self):
+        app = self.get_app()
+        module_name = trans(
+            self.get_module().name,
+            [app.default_language] + app.build_langs,
+            include_lang=False
+        )
         return "%(app_name)s > %(module_name)s > %(form_name)s" % {
-            'app_name': self.get_app().name,
-            'module_name': self.get_module().name[self.get_app().default_language],
+            'app_name': app.name,
+            'module_name': module_name,
             'form_name': self.default_name()
         }
 
@@ -1707,6 +1719,10 @@ class ApplicationBase(VersionedDoc, SnapshotMixin):
         return self.name if len(self.name) <= 12 else '%s..' % self.name[:10]
 
     @property
+    def has_careplan_module(self):
+        return False
+
+    @property
     def url_base(self):
         return get_url_base()
 
@@ -2375,26 +2391,21 @@ class Application(ApplicationBase, TranslationMixin, HQMediaMixin):
             module.rename_lang(old_lang, new_lang)
         _rename_key(self.translations, old_lang, new_lang)
 
-    def rearrange_langs(self, i, j):
-        langs = self.langs
-        langs.insert(i, langs.pop(j))
-        self.langs = langs
-
     def rearrange_modules(self, i, j):
         modules = self.modules
-        modules.insert(i, modules.pop(j))
+        try:
+            modules.insert(i, modules.pop(j))
+        except IndexError:
+            raise RearrangeError()
         self.modules = modules
-
-    def rearrange_detail_columns(self, module_id, detail_type, i, j):
-        module = self.get_module(module_id)
-        detail = module['details'][DETAIL_TYPES.index(detail_type)]
-        columns = detail['columns']
-        columns.insert(i, columns.pop(j))
-        detail['columns'] = columns
 
     def rearrange_forms(self, to_module_id, from_module_id, i, j):
         forms = self.modules[to_module_id]['forms']
-        forms.insert(i, forms.pop(j) if to_module_id == from_module_id else self.modules[from_module_id]['forms'].pop(j))
+        try:
+            forms.insert(i, forms.pop(j) if to_module_id == from_module_id
+                         else self.modules[from_module_id]['forms'].pop(j))
+        except IndexError:
+            raise RearrangeError()
         self.modules[to_module_id]['forms'] = forms
         if self.modules[to_module_id]['case_type'] != self.modules[from_module_id]['case_type']:
             return 'case type conflict'
@@ -2431,6 +2442,10 @@ class Application(ApplicationBase, TranslationMixin, HQMediaMixin):
                 if len(form.active_actions()) > 0:
                     return True
         return False
+
+    @memoized
+    def case_type_exists(self, case_type):
+        return case_type in [m.case_type for m in self.get_modules()]
 
     def has_media(self):
         return len(self.multimedia_map) > 0
@@ -2507,6 +2522,10 @@ class Application(ApplicationBase, TranslationMixin, HQMediaMixin):
         if setting is not None:
             return setting
         return yaml_setting.get("default")
+
+    @property
+    def has_careplan_module(self):
+        return any((module for module in self.modules if isinstance(module, CareplanModule)))
 
 
 class RemoteApp(ApplicationBase):
