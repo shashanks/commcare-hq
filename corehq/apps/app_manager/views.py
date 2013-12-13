@@ -701,8 +701,12 @@ def view_generic(req, domain, app_id=None, module_id=None, form_id=None, is_user
     if form:
         template, form_context = get_form_view_context_and_template(req, form, context['langs'], is_user_registration)
         context.update(form_context)
-        
-        references = get_validated_references(form)
+        # bit of an abstraction violation, but don't want to repeat work
+        # other option would be to move this into above function
+        if not form_context['form_errors']:
+            references = get_validated_references(form)
+        else:
+            references = None
         case_properties = get_all_case_properties(app)
         context.update({
             'case_management_in_vellum': app.case_management_in_vellum,
