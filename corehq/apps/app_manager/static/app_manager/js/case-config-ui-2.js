@@ -27,7 +27,8 @@ var CaseConfig = (function () {
         self.caseType = params.caseType;
         self.reserved_words = params.reserved_words;
         self.moduleCaseTypes = params.moduleCaseTypes;
-<<<<<<< HEAD
+/* TODO merge properly
+ <<<<<<< HEAD */
         self.propertiesMap = {};
         self.showCaseReferences = params.showCaseReferences;
         self.caseReferences = params.caseReferences;
@@ -51,9 +52,9 @@ var CaseConfig = (function () {
             self.propertiesMap = ko.mapping.fromJS(params.propertiesMap);
         };
         self.setPropertiesMap(params.propertiesMap);
-=======
+/* =======
         self.propertiesMap = ko.mapping.fromJS(params.propertiesMap);
->>>>>>> master
+>>>>>>> master */
 
         self.saveButton = COMMCAREHQ.SaveButton.init({
             unsavedMessage: "You have unchanged case settings",
@@ -686,7 +687,9 @@ var CaseConfig = (function () {
         }
     };
 
+/* TODO merge properly
 <<<<<<< HEAD
+*/
     var action_names = ["open_case", "update_case", "close_case", "case_preload"];
     CaseConfig.prototype.getQuestionLabel = function (path) {
         for (var i = 0; i < this.questions.length; i += 1) {
@@ -739,8 +742,10 @@ var CaseConfig = (function () {
         }
         return options;
     };
+/*
 =======
 >>>>>>> master
+*/
     return {
         CaseConfig: CaseConfig
     };
